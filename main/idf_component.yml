@@ -1,0 +1,5 @@
+dependencies:
+  micro_ros_espidf_component:
+    # TODO: Change back to original repository after they fixed https://github.com/micro-ROS/micro_ros_espidf_component/issues/288
+    git: https://github.com/Technologie-Hub-Wien-e-V/micro_ros_espidf_component.git
+  espressif/led_strip: "^3.0.0"

@@ -1,0 +1,10 @@
+BasedOnStyle: LLVM
+BreakBeforeBraces: Attach
+UseTab: Never
+IndentWidth: 4
+ColumnLimit: 220
+AllowShortEnumsOnASingleLine: false
+BinPackArguments: false
+BinPackParameters: false
+BraceWrapping:
+  AfterEnum: true

@@ -1,0 +1,249 @@
+menu "Application-specific settings"
+
+    menu "CAN settings"
+        
+        config CAN_LOGGER_TAG
+            string "Logger tag (CAN layer)"
+            default "CAN"
+    
+        config CAN_TX_GPIO
+            int "CAN TX GPIO"
+            range 0 33
+            default 23
+        
+        config CAN_RX_GPIO
+            int "CAN RX GPIO"
+            range 0 33
+            default 22
+        
+        config CAN_RTR_TIMEOUT_MS
+            int "RTR timeout (ms)"
+            default 50
+        
+        config CAN_RX_QUEUE_LEN
+            int "RX queue length"
+            default 10
+        
+        config CAN_TX_QUEUE_LEN
+            int "TX queue length"
+            default 10
+
+        config CAN_DISPATCHER_MAX_CALLBACKS
+            int "Max callbacks for CAN dispatcher"
+            default 16
+
+        config CAN_DISPATCHER_TASK_NAME
+            string "CAN dispatcher task name"
+            default "can_dispatcher"
+
+        config CAN_DISPATCHER_TASK_STACK_SIZE
+            int "CAN dispatcher task stack size"
+            default 4096
+            range 1024 16384
+
+        config CAN_DISPATCHER_TASK_PRIORITY
+            int "CAN dispatcher task priority"
+            default 5
+            range 1 16
+
+        config CAN_MAX_RECEIVE_TIMEOUT_MS
+            int "Max receive timeout (ms)"
+            default 1000
+            help
+                The maximum time to wait for a CAN message to be received. Can task will block
+                until a message is received or the timeout is reached.
+    
+    endmenu # CAN settings
+
+    menu "ODrive settings"
+        
+        config ODRIVE_NODE_ID_M0
+            int "Node-ID for Motor 0"
+            range 0 255
+            default 0
+        
+        config ODRIVE_NODE_ID_M1
+            int "Node-ID for Motor 1"
+            range 0 255
+            default 1
+        
+        config ODRIVE_HEARTBEAT_TIMEOUT_MS
+            int "Heartbeat timeout (ms)"
+            default 200
+        
+        config ODRIVE_ENCODER_ESTIMATES_TIMEOUT_MS
+            int "Encoder-estimates timeout (ms)"
+            default 50
+        
+        config ODRIVE_MAX_CALIBRATION_TIME_S
+            int "Maximum calibration time (s)"
+            default 20
+
+        config ODRIVE_MAX_AXIS_STATE_CHANGE_TIME_S
+            int "Maximum axis state change time (s)"
+            default 1
+
+        config ODRIVE_QUEUE_ACCESS_TIMEOUT_MS
+            int "Queue access timeout (ms)"
+            default 10
+
+        config ODRIVE_CAN_DATA_LENGTH
+            int "CAN data length"
+            default 8
+            range 8 8
+            help 
+                ODrive CAN messages are 8 bytes long. This is a fixed value.
+        
+        config ODRIVE_CAN_MAX_RTR_RESPONSE_TIME_MS
+            int "CAN RTR response time (ms)"
+            default 500
+            help 
+                The max time to wait to get a response to an RTR request from ODrive.
+
+        config ODRIVE_CAN_MAX_TRANSMIT_QUEUE_TIMEOUT_MS
+            int "CAN transmit queue timeout (ms)"
+            default 10
+
+        config ODRIVE_CAN_MAX_RECEIVE_QUEUE_TIMEOUT_MS
+            int "CAN receive queue timeout (ms)"
+            default 10
+        
+        config ODRIVE_LOGGER_TAG
+            string "Logger tag (general)"
+            default "ODRIVE"
+    
+    endmenu # ODrive CAN settings
+    
+    
+    menu "micro-ROS application"
+
+        config MROS_LOGGER_TAG
+            string "Logger tag (micro-ROS layer)"
+            default "MROS"
+
+        config MROS_EXECUTOR_SPIN_TIMEOUT_MS
+            int "Executor spin timeout (ms)"
+            default 10
+            
+        config CONFIG_MROS_AGENT_PERIOD_MS
+            int "micro-ROS agent period (ms)"
+            default 5000
+            help
+                The period in which a ping and sync is triggered to the micro-ROS agent.
+
+        config MROS_SERIAL_PORT
+            int "Serial port for micro-ROS agent"
+            default 0
+    
+        config MROS_NODE_NAME
+            string "micro-ROS node name"
+            default "car_node"
+        
+        config MROS_NODE_NAMESPACE
+            string "micro-ROS node namespace"
+            default ""
+
+        config MROS_CMD_VEL_TOPIC
+            string "micro-ROS cmd_vel topic"
+            default "cmd_vel"
+
+        config MROS_ODOMETRY_TOPIC
+            string "micro-ROS odometry topic"
+            default "odom"
+
+        config MROS_ODOMETRY_FRAME_ID
+            string "micro-ROS odometry frame ID"
+            default "odom"
+
+        config MROS_BASE_FRAME_ID
+            string "micro-ROS base frame ID"
+            default "base_link"
+
+        config MROS_MAX_TIME_SYNC_TIMEOUT_MS
+            int "Max time sync timeout (ms)"
+            default 1000
+            help
+                The maximum time to wait for a time sync from the micro-ROS agent.
+
+        config MROS_PING_TIMEOUT_MS
+            int "Ping timeout (ms)"
+            default 1000
+            help
+                The maximum time to wait for a ping from the micro-ROS agent.
+
+        config MROS_MAX_PING_ATTEMPTS
+            int "Max ping attempts"
+            default 3
+            help
+                The maximum number of ping attempts to the micro-ROS agent.
+        
+        config MROS_ODOM_PUBLISHER_PERIOD_MS
+            int "Odometry publisher period (ms)"
+            default 100
+            help
+                The internal state of the odometry publisher is updated once the encoder estimates for all motors are received.
+                The odometry is published at a fixed rate, defined by this parameter.
+
+        config MROS_EXECUTOR_TASK_NAME
+            string "micro-ROS executor task name"
+            default "mros_executor_task"
+
+        config MROS_EXECUTOR_TASK_STACK_SIZE
+            int "micro-ROS executor task stack size"
+            default 4096
+            range 1024 16384
+            
+        config MROS_EXECUTOR_TASK_PRIORITY
+            int "micro-ROS executor task priority"
+            default 5
+            range 1 16
+
+        config MROS_AGENT_TASK_NAME
+            string "micro-ROS agent task name"
+            default "mros_agent_task"
+
+        config MROS_AGENT_TASK_STACK_SIZE
+            int "micro-ROS agent task stack size"
+            default 4096
+            range 1024 16384
+
+        config MROS_AGENT_TASK_PRIORITY
+            int "micro-ROS agent task priority"
+            default 4
+            range 1 16
+
+    endmenu # micro-ROS application
+    
+    
+    menu "Robot kinematics"
+        
+        config ROBOT_WHEEL_RADIUS_MM
+            int "Wheel radius (mm)"
+            default 32
+            range 1 1000
+        
+        config ROBOT_TRACK_WIDTH_MM
+            int "Track width (mm)"
+            default 185
+            range 1 1000
+        
+        config ROBOT_WHEEL_BASE_MM
+            int "Wheelbase (mm)"
+            default 255
+            range 1 1000
+    
+    endmenu # Robot kinematics
+    
+    
+    config ERROR_LED_GPIO
+        int "Error-LED GPIO"
+        range 0 33
+        default 8
+
+    config JTAG_BUFF_SIZE
+        int "JTAG buffer size"
+        range 0 1024
+        default 1024
+    
+endmenu # Application-specific settings
+    

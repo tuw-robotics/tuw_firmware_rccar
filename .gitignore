@@ -1,0 +1,8 @@
+build
+sdkconfig
+sdkconfig.old
+main/build
+managed_components
+micro_ros_src
+traces
+dependencies.lock
