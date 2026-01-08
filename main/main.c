@@ -50,6 +50,7 @@ EventGroupHandle_t module_error_event_group = NULL;
 #define INIT_MROS_STARTED BIT6
 #define INIT_ROBOT_CONTROLLER BIT7
 #define INIT_ROBOT_CONTROLLER_STARTED BIT8
+#define INIT_SERVO BIT9
 
 static uint32_t init_status_flags = 0;
 static EventBits_t module_status_bits = 0;
@@ -111,6 +112,7 @@ void app_main(void) {
     }
     init_status_flags |= INIT_ODRIVE_MR_CONTEXT;
     ESP_LOGI(MAIN_TAG, "ODrive contexts initialized successfully");
+
     // Start odrives
     if (odrive_startup(&odrive_ml_context) != ESP_OK) {
         ESP_LOGE(MAIN_TAG, "Failed to start ODrive ML");
@@ -122,6 +124,7 @@ void app_main(void) {
     }
     init_status_flags |= INIT_ODRIVES_STARTED;
     ESP_LOGI(MAIN_TAG, "ODrive ML and MR started successfully");
+
     // Init mros
     if (mros_module_init(module_error_event_group, ERROR_BIT_MROS) != ESP_OK) {
         ESP_LOGE(MAIN_TAG, "Failed to initialize MROS");
@@ -136,13 +139,14 @@ void app_main(void) {
     }
     init_status_flags |= INIT_MROS_STARTED;
     ESP_LOGI(MAIN_TAG, "MROS module started successfully");
+
     // Init servo
     servo_t servo_context;
-
     if (servo_init(&servo_context, SERVO_GPIO, SERVO_CALIBRATED_MIDDLE_OFFSET) != ESP_OK) {
         ESP_LOGE(MAIN_TAG, "Failed to initialize servo");
         goto error_handling;
     }
+    init_status_flags |= INIT_SERVO;
     ESP_LOGI(MAIN_TAG, "Servo initialized successfully");
 
     // Init robot_controller
@@ -214,9 +218,8 @@ error_handling:
         odrive_context_cleanup(&odrive_mr_context);
     }
 
-    // Deinit servo
-    if (servo_deinit(&servo_context) != ESP_OK) {
-        ESP_LOGE(MAIN_TAG, "Failed to deinitialize servo");
+    if (init_status_flags & INIT_SERVO) {
+        servo_deinit(&servo_context);
     }
 
     // Deinit error handle event group
