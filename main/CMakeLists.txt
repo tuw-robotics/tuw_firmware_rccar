@@ -15,6 +15,7 @@ set(SOURCES
     utils/math_utils.c
     servo/servo.c
     robot_controller/robot_controller.c
+    odom/odom.c
 )
 
 idf_component_register(SRCS ${SOURCES}
