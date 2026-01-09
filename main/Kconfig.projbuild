@@ -81,6 +81,12 @@ menu "Application-specific settings"
             help
                 Baudrate of UART for MROS agent communication.
 
+        config MROS_CMD_VEL_TIMEOUT_MS
+            int "cmd_vel maximum timeout (ms)"
+            default 200
+            help
+                Maximum allowed time since last received cmd_vel message before stopping the robot.
+
     endmenu # micro-ROS application
     
     

@@ -11,7 +11,14 @@
 #include <freertos/FreeRTOS.h>
 #include <geometry_msgs/msg/twist_stamped.h>
 #include <nav_msgs/msg/odometry.h>
+#include <sdkconfig.h>
 #include <sys/time.h>
+
+#ifdef CONFIG_MROS_CMD_VEL_TIMEOUT_MS
+#define MROS_CMD_VEL_TIMEOUT_MS CONFIG_MROS_CMD_VEL_TIMEOUT_MS
+#else
+#define MROS_CMD_VEL_TIMEOUT_MS 200
+#endif
 
 static odrive_context_t *s_odrive_ml_context;
 static odrive_context_t *s_odrive_mr_context;
@@ -27,11 +34,36 @@ static EventGroupHandle_t s_base_control_evt_group;
 static EventGroupHandle_t s_base_control_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_base_control_err_bit;
 
+static builtin_interfaces__msg__Time time_delta(const builtin_interfaces__msg__Time *start, const builtin_interfaces__msg__Time *end) {
+    builtin_interfaces__msg__Time delta;
+    delta.sec = end->sec - start->sec;
+    int64_t delta_nanosec = (int64_t)end->nanosec - (int64_t)start->nanosec;
+
+    if (delta_nanosec < 0) {
+        delta.sec--;
+        delta_nanosec += 1000000000LL;
+    }
+    delta.nanosec = (uint32_t)delta_nanosec;
+
+    return delta;
+}
+
+static builtin_interfaces__msg__Time time_now() {
+    wallclock_timestamp_t timestamp_local_wallclock;
+    gettimeofday(&timestamp_local_wallclock, NULL);
+    builtin_interfaces__msg__Time timestamp_local;
+    timestamp_local.sec = timestamp_local_wallclock.tv_sec;
+    timestamp_local.nanosec = US_TO_NS(timestamp_local_wallclock.tv_usec);
+    return timestamp_local;
+}
+
 static void base_control_task(void *pv) {
     ESP_UNUSED(pv);
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Base control task started");
 
     geometry_msgs__msg__TwistStamped cmd_vel_local;
+    builtin_interfaces__msg__Time time_current;
+    builtin_interfaces__msg__Time time_last_cmd_delta;
 
     float torque_ff_ml = 0.0f;
     float torque_ff_mr = 0.0f;
@@ -56,38 +88,40 @@ static void base_control_task(void *pv) {
             break;
         }
 
-        ik_input.vel_x = cmd_vel_local.twist.linear.x;
-        ik_input.omega_z = cmd_vel_local.twist.angular.z;
+        time_current = time_now();
+        time_last_cmd_delta = time_delta(&cmd_vel_local.header.stamp, &time_current);
+        // stop if timeout exceeded
+        if (S_TO_MS(time_last_cmd_delta.sec) + US_TO_MS(NS_SUBS_TO_USEC(time_last_cmd_delta.nanosec)) > MROS_CMD_VEL_TIMEOUT_MS) {
+            if (odrive_set_velocity(s_odrive_ml_context, 0.0f, torque_ff_ml) != ESP_OK) {
+                ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
+                break;
+            }
+            if (odrive_set_velocity(s_odrive_mr_context, 0.0f, torque_ff_mr) != ESP_OK) {
+                ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_mr_context->node_id);
+                break;
+            }
+        } else {
+            // normal operation
+            ik_input.vel_x = cmd_vel_local.twist.linear.x;
+            ik_input.omega_z = cmd_vel_local.twist.angular.z;
 
-        if (inverse_kinematics(&ik_input, &ik_output) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate inverse kinematics");
-            return;
-        }
+            if (inverse_kinematics(&ik_input, &ik_output) != ESP_OK) {
+                ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate inverse kinematics");
+                return;
+            }
 
-        if (odrive_set_velocity(s_odrive_ml_context, RAD_TO_REV(ik_output.vel_l), torque_ff_ml) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
-            return;
-        }
-        if (odrive_set_velocity(s_odrive_mr_context, RAD_TO_REV(ik_output.vel_r), torque_ff_mr) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_mr_context->node_id);
-            return;
-        }
-#ifdef JITTER_DEBUG
-        // Calculate the jitter
-        wallclock_timestamp_t timestamp_local;
-        wallclock_timestamp_t timestamp_header;
-        gettimeofday(&timestamp_local, NULL);
-
-        timestamp_header.tv_sec = msg->header.stamp.sec;
-        timestamp_header.tv_usec = msg->header.stamp.nanosec / 1000; // Convert to microseconds
-
-        //! The timestamp from sending the cmd_vel until the calculated setpoint are sent to the ODrive
-        //! Accuracy is dependent on synchronization of the system clock and the timestamp of the cmd_vel message
-        ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Header: %lld.%06ld, Local: %lld.%06ld", timestamp_header.tv_sec, timestamp_header.tv_usec, timestamp_local.tv_sec, timestamp_local.tv_usec);
-#endif // JITTER_DEBUG
-        if (servo_set_angle(s_servo_context, RAD_TO_DEG(ik_output.steer)) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set steering angle");
-            return;
+            if (odrive_set_velocity(s_odrive_ml_context, RAD_TO_REV(ik_output.vel_l), torque_ff_ml) != ESP_OK) {
+                ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
+                return;
+            }
+            if (odrive_set_velocity(s_odrive_mr_context, RAD_TO_REV(ik_output.vel_r), torque_ff_mr) != ESP_OK) {
+                ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_mr_context->node_id);
+                return;
+            }
+            if (servo_set_angle(s_servo_context, RAD_TO_DEG(ik_output.steer)) != ESP_OK) {
+                ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set steering angle");
+                return;
+            }
         }
 
         vTaskDelay(1);
@@ -120,7 +154,11 @@ static void base_control_task(void *pv) {
 void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *context) {
     ESP_UNUSED(context);
 
-    if (xQueueOverwrite(s_cmd_vel_q, msg) != pdTRUE) {
+    // use local time as the timesyncronisation sometimes is of for some ms and we may want tight timeout for the internal control task
+    geometry_msgs__msg__TwistStamped msg_local = *msg;
+    msg_local.header.stamp = time_now();
+
+    if (xQueueOverwrite(s_cmd_vel_q, &msg_local) != pdTRUE) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to overwrite cmd_vel queue");
         return;
     }
