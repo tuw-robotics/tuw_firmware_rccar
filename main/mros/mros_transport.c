@@ -4,14 +4,6 @@
 #include <driver/gpio.h>
 #include <driver/uart.h>
 
-#include <sdkconfig.h>
-
-#ifdef CONFIG_MROS_UART_BAUDRATE
-#define MROS_UART_BAUDRATE CONFIG_MROS_UART_BAUDRATE
-#else
-#define MROS_UART_BAUDRATE 115200
-#endif
-
 #define UART_TXD (CONFIG_MICROROS_UART_TXD)
 #define UART_RXD (CONFIG_MICROROS_UART_RXD)
 #define UART_RTS (CONFIG_MICROROS_UART_RTS)
@@ -23,20 +15,20 @@ bool serial_open(struct uxrCustomTransport *transport) {
     size_t *uart_port = (size_t *)transport->args;
 
     uart_config_t uart_config = {
-        .baud_rate = MROS_UART_BAUDRATE,
+        .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
     };
 
-    if (uart_param_config(*uart_port, &uart_config) != ESP_OK) {
+    if (uart_param_config(*uart_port, &uart_config) == ESP_FAIL) {
         return false;
     }
-    if (uart_set_pin(*uart_port, UART_TXD, UART_RXD, UART_RTS, UART_CTS) != ESP_OK) {
+    if (uart_set_pin(*uart_port, UART_TXD, UART_RXD, UART_RTS, UART_CTS) == ESP_FAIL) {
         return false;
     }
-    if (uart_driver_install(*uart_port, UART_BUFFER_SIZE * 2, 0, 0, NULL, 0) != ESP_OK) {
+    if (uart_driver_install(*uart_port, UART_BUFFER_SIZE * 2, 0, 0, NULL, 0) == ESP_FAIL) {
         return false;
     }
 

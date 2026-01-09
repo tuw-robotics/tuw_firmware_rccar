@@ -22,7 +22,7 @@
         "cstdint": "c",
         "chrono": "c"
     },
-    "idf.flashType": "JTAG",
+    "idf.flashType": "UART",
     "idf.pythonInstallPath": "/usr/bin/python",
     "python.defaultInterpreterPath": "/opt/esp/python_env/idf5.4_py3.12_env/bin/python3",
     "[cpp]": {
@@ -33,5 +33,5 @@
     },
     "C_Cpp.formatting": "clangFormat",
     "editor.formatOnSave": true,
-    "idf.port": "/dev/ttyACM0"
+    "idf.port": "/dev/ttyUSB0"
 }

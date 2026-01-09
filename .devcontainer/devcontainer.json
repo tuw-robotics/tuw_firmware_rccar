@@ -4,12 +4,10 @@
 		"context": "..",
 		"dockerfile": "Dockerfile"
 	},
-	"containerEnv": {
-		"TZ": "${localEnv:TZ}"
-	},
 	"runArgs": [
 		"--privileged",
 		"--volume=/dev:/dev",
+		"--volume=/etc/timezone:/etc/timezone:ro",
 		"--network=host"
 	],
 	"remoteUser": "root",
