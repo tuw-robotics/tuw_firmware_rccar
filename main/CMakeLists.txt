@@ -16,6 +16,8 @@ set(SOURCES
     servo/servo.c
     robot_controller/robot_controller.c
     odom/odom.c
+    bno055/BNO055ESP32.cpp
+    bno055/bno_wrapper.cpp
 )
 
 idf_component_register(SRCS ${SOURCES}

@@ -129,6 +129,35 @@ menu "Application-specific settings"
 
     endmenu # Servo settings
 
+    menu "BNO055 I2C Settings"
+
+        config BNO055_I2C_ADDRESS
+            hex "BNO055 I2C Address"
+            default 0x28
+            range 0x00 0xFF
+
+        config BNO055_I2C_PORT
+            int "BNO055 I2C Port"
+            default 0
+            range 0 1
+
+        config BNO055_I2C_SCL_GPIO
+            int "BNO055 I2C SCL GPIO"
+            range 0 33
+            default 20
+
+        config BNO055_I2C_SDA_GPIO
+            int "BNO055 I2C SDA GPIO"
+            range 0 33
+            default 21
+
+        config BNO055_I2C_FREQUENCY_HZ
+            int "BNO055 I2C Frequency (Hz)"
+            default 95000
+            range 10000 1000000
+
+    endmenu # BNO055 I2C Settings
+
 
     config ERROR_LED_GPIO
         int "Error-LED GPIO"

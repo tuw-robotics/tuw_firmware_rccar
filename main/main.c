@@ -1,4 +1,6 @@
+#include "bno055/bno_wrapper.h"
 #include "can/can_interface.h"
+#include "driver/i2c.h"
 #include "mros/mros.h"
 #include "odom/odom.h"
 #include "odrive/odrive.h"
@@ -37,6 +39,32 @@
 #define SERVO_CALIBRATED_MIDDLE_OFFSET 46
 #endif
 
+#ifdef CONFIG_BNO055_I2C_SDA_GPIO
+#define SDA_PIN CONFIG_BNO055_I2C_SDA_GPIO
+#else
+#define SDA_PIN GPIO_NUM_21
+#endif
+#ifdef CONFIG_BNO055_I2C_SCL_GPIO
+#define SCL_PIN CONFIG_BNO055_I2C_SCL_GPIO
+#else
+#define SCL_PIN GPIO_NUM_20
+#endif
+#ifdef CONFIG_BNO055_I2C_PORT
+#define I2C_PORT CONFIG_BNO055_I2C_PORT
+#else
+#define I2C_PORT I2C_NUM_0
+#endif
+#ifdef CONFIG_BNO055_I2C_ADDRESS
+#define BNO055_ADDR CONFIG_BNO055_I2C_ADDRESS
+#else
+#define BNO055_ADDR 0x28
+#endif
+#ifdef CONFIG_BNO055_I2C_FREQUENCY_HZ
+#define BNO055_FREQUENCY CONFIG_BNO055_I2C_FREQUENCY_HZ
+#else
+#define BNO055_FREQUENCY 95000
+#endif
+
 EventGroupHandle_t module_error_event_group = NULL;
 #define ERROR_BIT_CAN BIT0
 #define ERROR_BIT_MROS BIT1
@@ -55,9 +83,26 @@ EventGroupHandle_t module_error_event_group = NULL;
 #define INIT_SERVO BIT9
 #define INIT_ODOM_PUBLISH BIT10
 #define INIT_ODOM_PUBLISH_STARTED BIT11
+#define INIT_I2C BIT12
+#define INIT_BNO055 BIT13
 
 static uint32_t init_status_flags = 0;
 static EventBits_t module_status_bits = 0;
+
+static esp_err_t i2c_master_init() {
+    i2c_config_t conf = {};
+    conf.mode = I2C_MODE_MASTER;
+    conf.sda_io_num = SDA_PIN;
+    conf.scl_io_num = SCL_PIN;
+    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.master.clk_speed = BNO055_FREQUENCY;
+
+    if (i2c_param_config(I2C_PORT, &conf) != ESP_OK) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
+}
 
 void app_main(void) {
     // Init indicator led
@@ -86,6 +131,29 @@ void app_main(void) {
         goto error_handling;
     }
     ESP_LOGI(MAIN_TAG, "JTAG debug initialized successfully");
+
+    // Init I2C
+    if (i2c_master_init() != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to initialize I2C");
+        goto error_handling;
+    }
+    init_status_flags |= INIT_I2C;
+    ESP_LOGI(MAIN_TAG, "I2C initialized successfully");
+
+    // Init BNO055
+    if (bno_begin_i2c(I2C_PORT, BNO055_ADDR) != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to initialize BNO055");
+        goto error_handling;
+    }
+    init_status_flags |= INIT_BNO055;
+    ESP_LOGI(MAIN_TAG, "BNO055 initialized successfully");
+
+    // Set BNO055 operation mode
+    if (bno_set_operation_mode(BNO055_OPERATION_MODE_IMU) != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to set BNO055 operation mode");
+        goto error_handling;
+    }
+    ESP_LOGI(MAIN_TAG, "BNO055 operation mode set successfully");
 
     // Init can
     if (can_module_init(module_error_event_group, ERROR_BIT_CAN) != ESP_OK) {
@@ -251,6 +319,13 @@ error_handling:
 
     if (init_status_flags & INIT_SERVO) {
         servo_deinit(&servo_context);
+    }
+
+    if (init_status_flags & INIT_BNO055) {
+        bno_stop();
+    }
+    if (init_status_flags & INIT_I2C) {
+        i2c_driver_delete(I2C_PORT);
     }
 
     // Deinit error handle event group
