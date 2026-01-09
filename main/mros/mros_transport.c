@@ -4,6 +4,14 @@
 #include <driver/gpio.h>
 #include <driver/uart.h>
 
+#include <sdkconfig.h>
+
+#ifdef CONFIG_MROS_UART_BAUDRATE
+#define MROS_UART_BAUDRATE CONFIG_MROS_UART_BAUDRATE
+#else
+#define MROS_UART_BAUDRATE 115200
+#endif
+
 #define UART_TXD (CONFIG_MICROROS_UART_TXD)
 #define UART_RXD (CONFIG_MICROROS_UART_RXD)
 #define UART_RTS (CONFIG_MICROROS_UART_RTS)
@@ -15,7 +23,7 @@ bool serial_open(struct uxrCustomTransport *transport) {
     size_t *uart_port = (size_t *)transport->args;
 
     uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = MROS_UART_BAUDRATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
