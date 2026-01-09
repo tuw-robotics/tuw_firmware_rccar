@@ -22,13 +22,13 @@ bool serial_open(struct uxrCustomTransport *transport) {
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
     };
 
-    if (uart_param_config(*uart_port, &uart_config) == ESP_FAIL) {
+    if (uart_param_config(*uart_port, &uart_config) != ESP_OK) {
         return false;
     }
-    if (uart_set_pin(*uart_port, UART_TXD, UART_RXD, UART_RTS, UART_CTS) == ESP_FAIL) {
+    if (uart_set_pin(*uart_port, UART_TXD, UART_RXD, UART_RTS, UART_CTS) != ESP_OK) {
         return false;
     }
-    if (uart_driver_install(*uart_port, UART_BUFFER_SIZE * 2, 0, 0, NULL, 0) == ESP_FAIL) {
+    if (uart_driver_install(*uart_port, UART_BUFFER_SIZE * 2, 0, 0, NULL, 0) != ESP_OK) {
         return false;
     }
 
