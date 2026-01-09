@@ -32,102 +32,12 @@ static void base_control_task(void *pv) {
 
     EventBits_t bits = xEventGroupWaitBits(s_base_control_evt_group, BASE_CONTROL_RUN_BIT, pdFALSE, pdTRUE, portMAX_DELAY); // Wait for start signal
 
-    nav_msgs__msg__Odometry odom_msg;
-    odrive_encoder_estimates_t estimates_ml;
-    odrive_encoder_estimates_t estimates_mr;
-    wallclock_timestamp_t timestamp_ml;
-    wallclock_timestamp_t timestamp_mr;
-
-    float pos_x = 0.0f, pos_y = 0.0f;
-    float qx = 0.0f, qy = 0.0f, qz = 0.0f, qw = 1.0f; // identity orientation
-
-    if (mros_init_odometry_msg(&odom_msg) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to initialize odometry message");
-        vTaskDelete(NULL);
-    }
-    xEventGroupClearBits(s_base_control_evt_group, BASE_CONTROL_TERM_BIT);
-
-    // Wait for first estimates to be available (max 10s)
-    if (odrive_get_encoder_estimates(s_odrive_ml_context, &estimates_ml, &timestamp_ml, false, pdMS_TO_TICKS(S_TO_MS(10))) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get encoder estimates for ODrive Node ID %d", s_odrive_ml_context->node_id);
-        xEventGroupSetBits(s_base_control_err_evt_group, s_base_control_err_bit);
-        vTaskDelete(NULL);
-    }
-    if (odrive_get_encoder_estimates(s_odrive_mr_context, &estimates_mr, &timestamp_mr, false, pdMS_TO_TICKS(S_TO_MS(10))) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get encoder estimates for ODrive Node ID %d", s_odrive_mr_context->node_id);
-        xEventGroupSetBits(s_base_control_err_evt_group, s_base_control_err_bit);
-        vTaskDelete(NULL);
-    }
-
-    float prev_pos_ml = estimates_ml.pos_estimate;
-    float prev_pos_mr = estimates_mr.pos_estimate;
-
     while (true) {
         bits = xEventGroupGetBits(s_base_control_evt_group);
         if (!(bits & BASE_CONTROL_RUN_BIT)) {
             break; // Instead of terminating every time the run bit is unset, we could just set it to a waiting state -> can be restarted again
         }
-
-        // Wait for encoder estimates -> block until we have them or timeout
-        if (odrive_get_encoder_estimates(s_odrive_ml_context, &estimates_ml, &timestamp_ml, true, pdMS_TO_TICKS(ODRIVE_ENCODER_ESTIMATES_TIMEOUT_MS)) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get encoder estimates for ODrive Node ID %d", s_odrive_ml_context->node_id);
-            break;
-        }
-        if (odrive_get_encoder_estimates(s_odrive_mr_context, &estimates_mr, &timestamp_mr, true, pdMS_TO_TICKS(ODRIVE_ENCODER_ESTIMATES_TIMEOUT_MS)) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get encoder estimates for ODrive Node ID %d", s_odrive_mr_context->node_id);
-            break;
-        }
-
-        float delta_pos_ml = estimates_ml.pos_estimate - prev_pos_ml;
-        float delta_pos_mr = estimates_mr.pos_estimate - prev_pos_mr;
-
-        prev_pos_ml = estimates_ml.pos_estimate;
-        prev_pos_mr = estimates_mr.pos_estimate;
-
-        forward_kinematics_input_t fk_input = {
-            .delta_pos_l = delta_pos_ml,
-            .delta_pos_r = delta_pos_mr,
-            .vel_l = estimates_ml.vel_estimate,
-            .vel_r = estimates_mr.vel_estimate};
-
-        forward_kinematics_output_t fk_output = {
-            .pos_x = pos_x,
-            .pos_y = pos_y,
-            .qx = qx,
-            .qy = qy,
-            .qz = qz,
-            .qw = qw,
-            .vel_x = 0.0f,
-            .omega_z = 0.0f};
-
-        if (forward_kinematics(&fk_input, &fk_output) != ESP_OK) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate forward kinematics");
-            break;
-        }
-
-        pos_x = fk_output.pos_x;
-        pos_y = fk_output.pos_y;
-        qx = fk_output.qx;
-        qy = fk_output.qy;
-        qz = fk_output.qz;
-        qw = fk_output.qw;
-
-        //! We use the timestamp of the right encoder for the odometry message
-        odom_msg.header.stamp.sec = timestamp_mr.tv_sec;
-        odom_msg.header.stamp.nanosec = US_TO_NS(timestamp_mr.tv_usec);
-        odom_msg.pose.pose.position.x = fk_output.pos_x;
-        odom_msg.pose.pose.position.y = fk_output.pos_y;
-        odom_msg.pose.pose.orientation.x = fk_output.qx;
-        odom_msg.pose.pose.orientation.y = fk_output.qy;
-        odom_msg.pose.pose.orientation.z = fk_output.qz;
-        odom_msg.pose.pose.orientation.w = fk_output.qw;
-        odom_msg.twist.twist.linear.x = fk_output.vel_x;
-        odom_msg.twist.twist.angular.z = fk_output.omega_z;
-
-        if (mros_update_odometry(&odom_msg) != ESP_OK) { // Mros will publish it once the internal timer is triggered
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update odometry");
-            break;
-        }
+        vTaskDelay(1);
     }
 
     if ((bits & BASE_CONTROL_RUN_BIT)) {
@@ -149,9 +59,7 @@ void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *cont
     float torque_ff_ml = 0.0f;
     float torque_ff_mr = 0.0f;
 
-    inverse_kinematics_input_t ik_input = {
-        .vel_x = msg->twist.linear.x,
-        .omega_z = msg->twist.angular.z};
+    inverse_kinematics_input_t ik_input = {.vel_x = msg->twist.linear.x, .omega_z = msg->twist.angular.z};
 
     inverse_kinematics_output_t ik_output;
 
@@ -191,7 +99,8 @@ void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *cont
         return;
     }
 
-    // ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Set velocities: ml: %f rad/s = %f rev/s, mr: %f rad/s = %f rev/s, steer angle: %f deg", ik_output.vel_l, RAD_TO_REV(ik_output.vel_l), ik_output.vel_r, RAD_TO_REV(ik_output.vel_r), RAD_TO_DEG(ik_output.steer));
+    // ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Set velocities: ml: %f rad/s = %f rev/s, mr: %f rad/s = %f rev/s, steer angle: %f deg", ik_output.vel_l, RAD_TO_REV(ik_output.vel_l), ik_output.vel_r,
+    // RAD_TO_REV(ik_output.vel_r), RAD_TO_DEG(ik_output.steer));
 }
 
 esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_context_t *odrive_mr_context, servo_t *servo_context, EventGroupHandle_t error_handle, EventBits_t error_bit) {
