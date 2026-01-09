@@ -255,12 +255,6 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     }
     ESP_LOGI(MROS_LOGGER_TAG, "Odom queue created");
 
-    if (rmw_uros_ping_agent(1000, 5) != RMW_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "micro-ROS agent NOT reachable");
-        return ESP_FAIL;
-    }
-    ESP_LOGI(MROS_LOGGER_TAG, "micro-ROS agent reachable");
-
     s_allocator = rcl_get_default_allocator();
     if (rclc_support_init(&s_support, 0, NULL, &s_allocator) != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize rcl support");

@@ -75,12 +75,6 @@ menu "Application-specific settings"
             help
                 Rate at which odometry messages are published.
 
-        config MROS_UART_BAUDRATE
-            int "UART baudrate"
-            default 115200
-            help
-                Baudrate of UART for MROS agent communication.
-
     endmenu # micro-ROS application
     
     
