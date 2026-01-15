@@ -102,10 +102,15 @@ static esp_err_t i2c_master_init() {
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.master.clk_speed = BNO055_FREQUENCY;
 
-    if (i2c_param_config(I2C_PORT, &conf) != ESP_OK) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    return i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
+    esp_err_t err = i2c_param_config(I2C_PORT, &conf);
+    if (err != ESP_OK)
+        return err;
+
+    err = i2c_driver_install(I2C_PORT, conf.mode, 0, 0, 0);
+    if (err != ESP_OK)
+        return err;
+
+    return i2c_set_timeout(I2C_PORT, 0x0000001FU); // Set max timeout
 }
 
 void app_main(void) {
