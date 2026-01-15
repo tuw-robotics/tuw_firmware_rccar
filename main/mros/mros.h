@@ -9,6 +9,7 @@
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
 #include <sdkconfig.h>
+#include <sensor_msgs/msg/imu.h>
 #include <stdbool.h>
 
 #include "utils/timing_utils.h"
@@ -73,6 +74,38 @@ esp_err_t mros_init_odometry_msg(nav_msgs__msg__Odometry *odom_msg);
  * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue overwrite fails
  */
 esp_err_t mros_update_odometry(nav_msgs__msg__Odometry *odom_msg);
+
+/**
+ * @brief Peeks the latest odometry message without removing it from the queue
+ *
+ * @param odom_msg Pointer to the odometry message to be filled
+ * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue peek fails
+ */
+esp_err_t mros_peek_odometry_msg(nav_msgs__msg__Odometry *odom_msg);
+
+/**
+ * @brief Initializes the IMU message
+ *
+ * @param imu_msg Pointer to the IMU message to be initialized
+ * @return esp_err_t ESP_OK on success, ESP_ERR_INVALID_ARG if imu_msg is NULL
+ */
+esp_err_t mros_init_imu_msg(sensor_msgs__msg__Imu *imu_msg);
+
+/**
+ * @brief Updates the IMU message
+ *
+ * @param imu_msg Pointer to the IMU message to be updated
+ * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue overwrite fails
+ */
+esp_err_t mros_update_imu(sensor_msgs__msg__Imu *imu_msg);
+
+/**
+ * @brief Peeks the latest IMU message without removing it from the queue
+ *
+ * @param imu_msg Pointer to the IMU message to be filled
+ * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue peek fails
+ */
+esp_err_t mros_peek_imu_msg(sensor_msgs__msg__Imu *imu_msg);
 
 /**
  * @brief Checks if the MROS agent is connected

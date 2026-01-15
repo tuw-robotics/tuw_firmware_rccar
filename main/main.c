@@ -1,6 +1,7 @@
 #include "bno055/bno_wrapper.h"
 #include "can/can_interface.h"
 #include "driver/i2c.h"
+#include "imu/imu.h"
 #include "mros/mros.h"
 #include "odom/odom.h"
 #include "odrive/odrive.h"
@@ -69,7 +70,8 @@ EventGroupHandle_t module_error_event_group = NULL;
 #define ERROR_BIT_CAN BIT0
 #define ERROR_BIT_MROS BIT1
 #define ERROR_BIT_ROBOT_CONTROLLER BIT2
-#define ERROR_BIT_ODOM_PUBLISH BIT3
+#define ERROR_BIT_ODOM_TASK BIT3
+#define ERROR_BIT_IMU_TASK BIT4
 
 #define INIT_LED BIT0
 #define INIT_CAN_MODULE BIT1
@@ -81,10 +83,12 @@ EventGroupHandle_t module_error_event_group = NULL;
 #define INIT_ROBOT_CONTROLLER BIT7
 #define INIT_ROBOT_CONTROLLER_STARTED BIT8
 #define INIT_SERVO BIT9
-#define INIT_ODOM_PUBLISH BIT10
-#define INIT_ODOM_PUBLISH_STARTED BIT11
+#define INIT_ODOM_TASK BIT10
+#define INIT_ODOM_TASK_STARTED BIT11
 #define INIT_I2C BIT12
 #define INIT_BNO055 BIT13
+#define INIT_IMU_TASK BIT14
+#define INIT_IMU_TASK_STARTED BIT15
 
 static uint32_t init_status_flags = 0;
 static EventBits_t module_status_bits = 0;
@@ -237,28 +241,44 @@ void app_main(void) {
     init_status_flags |= INIT_ROBOT_CONTROLLER_STARTED;
     ESP_LOGI(MAIN_TAG, "Robot controller started successfully");
 
-    // Init Odom publish task
-    if (odom_publish_task_init(&odrive_ml_context, &odrive_mr_context, &servo_context, module_error_event_group, ERROR_BIT_ODOM_PUBLISH) != ESP_OK) {
-        ESP_LOGE(MAIN_TAG, "Failed to initialize odom publish task");
+    // Init Odom task
+    if (odom_task_init(&odrive_ml_context, &odrive_mr_context, &servo_context, module_error_event_group, ERROR_BIT_ODOM_TASK) != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to initialize odom task");
         goto error_handling;
     }
-    init_status_flags |= INIT_ODOM_PUBLISH;
-    ESP_LOGI(MAIN_TAG, "Odom publish task initialized successfully");
+    init_status_flags |= INIT_ODOM_TASK;
+    ESP_LOGI(MAIN_TAG, "Odom task initialized successfully");
 
-    // Start Odom publish task
-    if (odom_publish_task_start() != ESP_OK) {
-        ESP_LOGE(MAIN_TAG, "Failed to start odom publish task");
+    // Start Odom task
+    if (odom_task_start() != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to start odom task");
         goto error_handling;
     }
-    init_status_flags |= INIT_ODOM_PUBLISH_STARTED;
-    ESP_LOGI(MAIN_TAG, "Odom publish task started successfully");
+    init_status_flags |= INIT_ODOM_TASK_STARTED;
+    ESP_LOGI(MAIN_TAG, "Odom task started successfully");
+
+    // Iinit IMU task
+    if (imu_task_init(module_error_event_group, ERROR_BIT_IMU_TASK) != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to initialize IMU task");
+        goto error_handling;
+    }
+    init_status_flags |= INIT_IMU_TASK;
+    ESP_LOGI(MAIN_TAG, "IMU task initialized successfully");
+
+    // Start IMU task
+    if (imu_task_start() != ESP_OK) {
+        ESP_LOGE(MAIN_TAG, "Failed to start IMU task");
+        goto error_handling;
+    }
+    init_status_flags |= INIT_IMU_TASK_STARTED;
+    ESP_LOGI(MAIN_TAG, "IMU task started successfully");
 
     ESP_LOGI(MAIN_TAG, "Startup sequence completed successfully");
 
     indicator_led_set_status(LED_STATUS_OK);
 
     // Then wait for errors, if so, terminate and cleanup
-    module_status_bits = xEventGroupWaitBits(module_error_event_group, ERROR_BIT_CAN | ERROR_BIT_MROS | ERROR_BIT_ROBOT_CONTROLLER | ERROR_BIT_ODOM_PUBLISH, pdTRUE, pdFALSE, portMAX_DELAY);
+    module_status_bits = xEventGroupWaitBits(module_error_event_group, ERROR_BIT_CAN | ERROR_BIT_MROS | ERROR_BIT_ROBOT_CONTROLLER | ERROR_BIT_ODOM_TASK | ERROR_BIT_IMU_TASK, pdTRUE, pdFALSE, portMAX_DELAY);
 
     if (module_status_bits & ERROR_BIT_CAN) {
         ESP_LOGE(MAIN_TAG, "CAN error detected");
@@ -269,8 +289,11 @@ void app_main(void) {
     if (module_status_bits & ERROR_BIT_ROBOT_CONTROLLER) {
         ESP_LOGE(MAIN_TAG, "Robot controller error detected");
     }
-    if (module_status_bits & ERROR_BIT_ODOM_PUBLISH) {
-        ESP_LOGE(MAIN_TAG, "Odom publish error detected");
+    if (module_status_bits & ERROR_BIT_ODOM_TASK) {
+        ESP_LOGE(MAIN_TAG, "Odom task error detected");
+    }
+    if (module_status_bits & ERROR_BIT_IMU_TASK) {
+        ESP_LOGE(MAIN_TAG, "IMU task error detected");
     }
 
 error_handling:
@@ -278,11 +301,18 @@ error_handling:
 
     ESP_LOGI(MAIN_TAG, "Handling error and trying to safely shutdown...");
 
-    if (init_status_flags & INIT_ODOM_PUBLISH_STARTED) {
-        odom_publish_task_stop(pdMS_TO_TICKS(1000));
+    if (init_status_flags & INIT_ODOM_TASK_STARTED) {
+        odom_task_stop(pdMS_TO_TICKS(1000));
     }
-    if (init_status_flags & INIT_ODOM_PUBLISH) {
-        odom_publish_task_deinit(pdMS_TO_TICKS(1000));
+    if (init_status_flags & INIT_ODOM_TASK) {
+        odom_task_deinit(pdMS_TO_TICKS(1000));
+    }
+
+    if (init_status_flags & INIT_IMU_TASK_STARTED) {
+        imu_task_stop(pdMS_TO_TICKS(1000));
+    }
+    if (init_status_flags & INIT_IMU_TASK) {
+        imu_task_deinit(pdMS_TO_TICKS(1000));
     }
 
     if ((init_status_flags & INIT_ODRIVES_STARTED) && !(module_status_bits & ERROR_BIT_CAN)) {

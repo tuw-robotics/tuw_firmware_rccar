@@ -24,6 +24,7 @@
 
 #include <geometry_msgs/msg/twist_stamped.h>
 #include <nav_msgs/msg/odometry.h>
+#include <sensor_msgs/msg/imu.h>
 #include <uros_network_interfaces.h>
 
 #include "mros_param.h"
@@ -36,6 +37,8 @@ static rcl_node_t s_node;
 static rclc_executor_t s_executor;
 static rcl_timer_t s_odom_timer;
 static rcl_publisher_t s_odom_publisher;
+static rcl_timer_t s_imu_timer;
+static rcl_publisher_t s_imu_publisher;
 static rcl_subscription_t s_cmd_vel_subscriber;
 static rclc_parameter_server_t s_param_server;
 
@@ -53,13 +56,14 @@ static EventGroupHandle_t s_mros_evt_group;
 static EventGroupHandle_t s_mros_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_mros_err_bit;
 
-#define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 2 // PARAM HANDLES + 2 for the timer and the subscription
+#define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 2 + 2 // PARAM HANDLES + 2 for timer +2 for subscription
 
 static mros_cmd_vel_cb_t s_user_cmd_vel_cb;
 static void *s_user_cmd_vel_ctx;
 
 static geometry_msgs__msg__TwistStamped s_cmd_vel_buffer;
 static QueueHandle_t s_odom_q;
+static QueueHandle_t s_imu_q;
 
 static void internal_cmd_vel_callback(const void *msgin) {
     if (s_user_cmd_vel_cb) {
@@ -80,6 +84,21 @@ static void odom_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
 
     if (rcl_publish(&s_odom_publisher, &odom_msg, NULL) != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to publish odometry");
+        return;
+    }
+}
+
+static void imu_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
+    ESP_UNUSED(timer);
+    ESP_UNUSED(last_call_time);
+    sensor_msgs__msg__Imu imu_msg;
+    if (xQueuePeek(s_imu_q, &imu_msg, 0) != pdTRUE) {
+        ESP_LOGW(MROS_LOGGER_TAG, "No IMU data available in the queue");
+        return;
+    }
+
+    if (rcl_publish(&s_imu_publisher, &imu_msg, NULL) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to publish IMU");
         return;
     }
 }
@@ -255,6 +274,13 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     }
     ESP_LOGI(MROS_LOGGER_TAG, "Odom queue created");
 
+    s_imu_q = xQueueCreate(1, sizeof(sensor_msgs__msg__Imu));
+    if (s_imu_q == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to create IMU queue");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU queue created");
+
     if (rmw_uros_ping_agent(1000, 5) != RMW_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "micro-ROS agent NOT reachable");
         return ESP_FAIL;
@@ -288,6 +314,18 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
         return ESP_FAIL;
     }
     ESP_LOGI(MROS_LOGGER_TAG, "Timer initialized");
+
+    if (rclc_publisher_init_best_effort(&s_imu_publisher, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu), MROS_IMU_TOPIC) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize IMU publisher");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU publisher initialized");
+
+    if (rclc_timer_init_default2(&s_imu_timer, &s_support, RCL_MS_TO_NS(MROS_IMU_PUBLISHER_PERIOD_MS), imu_timer_callback, true) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize IMU timer");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU timer initialized");
 
     if (rclc_parameter_server_init_default(&s_param_server, &s_node) != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize parameter server");
@@ -334,10 +372,16 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     ESP_LOGI(MROS_LOGGER_TAG, "Parameter server added to executor");
 
     if (rclc_executor_add_timer(&s_executor, &s_odom_timer) != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add timer to executor");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add odom timer to executor");
         return ESP_FAIL;
     }
-    ESP_LOGI(MROS_LOGGER_TAG, "Timer added to executor");
+    ESP_LOGI(MROS_LOGGER_TAG, "Odom timer added to executor");
+
+    if (rclc_executor_add_timer(&s_executor, &s_imu_timer) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add IMU timer to executor");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU timer added to executor");
 
     s_mros_evt_group = xEventGroupCreate();
     if (!s_mros_evt_group) {
@@ -413,11 +457,17 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
     if (rcl_publisher_fini(&s_odom_publisher, &s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize odom publisher");
     }
+    if (rcl_publisher_fini(&s_imu_publisher, &s_node) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU publisher");
+    }
     if (rcl_subscription_fini(&s_cmd_vel_subscriber, &s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize cmd_vel subscriber");
     }
     if (rcl_timer_fini(&s_odom_timer) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize odom timer");
+    }
+    if (rcl_timer_fini(&s_imu_timer) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU timer");
     }
     if (rcl_node_fini(&s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize node");
@@ -434,6 +484,11 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
         s_odom_q = NULL;
     }
 
+    if (s_imu_q) {
+        vQueueDelete(s_imu_q);
+        s_imu_q = NULL;
+    }
+
     if (s_mros_exec_task_h) {
         vTaskDelete(s_mros_exec_task_h);
         s_mros_exec_task_h = NULL;
@@ -445,6 +500,7 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
     }
 
     s_odom_q = NULL;
+    s_imu_q = NULL;
     s_mros_exec_task_h = NULL;
     s_mros_sync_task_h = NULL;
     s_user_cmd_vel_cb = NULL;
@@ -503,6 +559,49 @@ esp_err_t mros_init_odometry_msg(nav_msgs__msg__Odometry *odom_msg) {
     odom_msg->twist.twist.angular.x = 0.0f;
     odom_msg->twist.twist.angular.y = 0.0f;
 
+    return ESP_OK;
+}
+
+esp_err_t mros_peek_odometry_msg(nav_msgs__msg__Odometry *odom_msg) {
+    if (xQueuePeek(s_odom_q, odom_msg, 0) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to peek odom queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mros_update_imu(sensor_msgs__msg__Imu *imu_msg) {
+    if (xQueueOverwrite(s_imu_q, imu_msg) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to overwrite IMU queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mros_init_imu_msg(sensor_msgs__msg__Imu *imu_msg) {
+    if (imu_msg == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Invalid argument to init_imu_msg");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(imu_msg, 0, sizeof(sensor_msgs__msg__Imu));
+
+    rosidl_runtime_c__String__assign(&imu_msg->header.frame_id, MROS_IMU_FRAME_ID);
+
+    for (int i = 0; i < 9; ++i) {
+        imu_msg->orientation_covariance[i] = -1.0;
+        imu_msg->angular_velocity_covariance[i] = -1.0;
+        imu_msg->linear_acceleration_covariance[i] = -1.0;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t mros_peek_imu_msg(sensor_msgs__msg__Imu *imu_msg) {
+    if (xQueuePeek(s_imu_q, imu_msg, 0) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to peek IMU queue");
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 

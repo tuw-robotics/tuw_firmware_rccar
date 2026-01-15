@@ -43,6 +43,46 @@ menu "Application-specific settings"
     
     menu "micro-ROS application"
 
+        menu "Messages"
+
+            menu "Odometry"
+
+                config MROS_ODOMETRY_TOPIC
+                    string "micro-ROS odometry topic"
+                    default "odom"
+
+                config MROS_ODOMETRY_FRAME_ID
+                    string "micro-ROS odometry frame ID"
+                    default "odom"
+
+                config MROS_ODOM_PUBLISHER_PERIOD_MS
+                    int "Odometry publisher period (ms)"
+                    default 100
+                    help
+                        Rate at which odometry messages are published.
+
+            endmenu # Odometry
+
+            menu "IMU"
+
+                config MROS_IMU_TOPIC
+                    string "micro-ROS IMU topic"
+                    default "imu"
+
+                config MROS_IMU_FRAME_ID
+                    string "micro-ROS IMU frame ID"
+                    default "imu"
+
+                config MROS_IMU_PUBLISHER_PERIOD_MS
+                    int "IMU publisher period (ms)"
+                    default 100
+                    help
+                        Rate at which IMU messages are published.
+
+            endmenu # IMU
+
+        endmenu # Messages
+
         config MROS_NODE_NAME
             string "micro-ROS node name"
             default "car_node"
@@ -57,23 +97,9 @@ menu "Application-specific settings"
             string "micro-ROS cmd_vel topic"
             default "cmd_vel"
 
-        config MROS_ODOMETRY_TOPIC
-            string "micro-ROS odometry topic"
-            default "odom"
-
-        config MROS_ODOMETRY_FRAME_ID
-            string "micro-ROS odometry frame ID"
-            default "odom"
-
         config MROS_BASE_FRAME_ID
             string "micro-ROS base frame ID"
             default "base_link"
-
-        config MROS_ODOM_PUBLISHER_PERIOD_MS
-            int "Odometry publisher period (ms)"
-            default 100
-            help
-                Rate at which odometry messages are published.
 
         config MROS_UART_BAUDRATE
             int "UART baudrate"
