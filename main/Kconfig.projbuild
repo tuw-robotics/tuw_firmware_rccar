@@ -43,6 +43,46 @@ menu "Application-specific settings"
     
     menu "micro-ROS application"
 
+        menu "Messages"
+
+            menu "Odometry"
+
+                config MROS_ODOMETRY_TOPIC
+                    string "micro-ROS odometry topic"
+                    default "odom"
+
+                config MROS_ODOMETRY_FRAME_ID
+                    string "micro-ROS odometry frame ID"
+                    default "odom"
+
+                config MROS_ODOM_PUBLISHER_PERIOD_MS
+                    int "Odometry publisher period (ms)"
+                    default 100
+                    help
+                        Rate at which odometry messages are published.
+
+            endmenu # Odometry
+
+            menu "IMU"
+
+                config MROS_IMU_TOPIC
+                    string "micro-ROS IMU topic"
+                    default "imu"
+
+                config MROS_IMU_FRAME_ID
+                    string "micro-ROS IMU frame ID"
+                    default "imu"
+
+                config MROS_IMU_PUBLISHER_PERIOD_MS
+                    int "IMU publisher period (ms)"
+                    default 100
+                    help
+                        Rate at which IMU messages are published.
+
+            endmenu # IMU
+
+        endmenu # Messages
+
         config MROS_NODE_NAME
             string "micro-ROS node name"
             default "car_node"
@@ -57,23 +97,9 @@ menu "Application-specific settings"
             string "micro-ROS cmd_vel topic"
             default "cmd_vel"
 
-        config MROS_ODOMETRY_TOPIC
-            string "micro-ROS odometry topic"
-            default "odom"
-
-        config MROS_ODOMETRY_FRAME_ID
-            string "micro-ROS odometry frame ID"
-            default "odom"
-
         config MROS_BASE_FRAME_ID
             string "micro-ROS base frame ID"
             default "base_link"
-
-        config MROS_ODOM_PUBLISHER_PERIOD_MS
-            int "Odometry publisher period (ms)"
-            default 100
-            help
-                Rate at which odometry messages are published.
 
         config MROS_UART_BAUDRATE
             int "UART baudrate"
@@ -128,6 +154,35 @@ menu "Application-specific settings"
                 Adjust this value to align the servo to the true center position.
 
     endmenu # Servo settings
+
+    menu "BNO055 I2C Settings"
+
+        config BNO055_I2C_ADDRESS
+            hex "BNO055 I2C Address"
+            default 0x28
+            range 0x00 0xFF
+
+        config BNO055_I2C_PORT
+            int "BNO055 I2C Port"
+            default 0
+            range 0 1
+
+        config BNO055_I2C_SCL_GPIO
+            int "BNO055 I2C SCL GPIO"
+            range 0 33
+            default 20
+
+        config BNO055_I2C_SDA_GPIO
+            int "BNO055 I2C SDA GPIO"
+            range 0 33
+            default 21
+
+        config BNO055_I2C_FREQUENCY_HZ
+            int "BNO055 I2C Frequency (Hz)"
+            default 95000
+            range 10000 1000000
+
+    endmenu # BNO055 I2C Settings
 
 
     config ERROR_LED_GPIO
