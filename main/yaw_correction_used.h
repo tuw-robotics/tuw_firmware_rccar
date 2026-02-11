@@ -1,0 +1,12 @@
+#ifndef YAW_CORRECTION_USED_H
+#define YAW_CORRECTION_USED_H
+
+#include <sdkconfig.h>
+
+#ifdef CONFIG_YAW_CORRECTION
+#define YAW_CORRECTION CONFIG_YAW_CORRECTION
+#else
+#define YAW_CORRECTION 1
+#endif
+
+#endif // YAW_CORRECTION_USED_H

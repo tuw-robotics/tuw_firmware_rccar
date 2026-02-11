@@ -30,6 +30,12 @@
 #include "mros_param.h"
 #include "mros_transport.h"
 #include "utils/timing_utils.h"
+#include "yaw_correction_used.h"
+
+#if YAW_CORRECTION
+#include <rccar_msgs/msg/rccar_corr1_time2.h>
+#include <sensor_msgs/msg/time_reference.h>
+#endif
 
 static rcl_allocator_t s_allocator;
 static rclc_support_t s_support;
@@ -39,6 +45,12 @@ static rcl_timer_t s_odom_timer;
 static rcl_publisher_t s_odom_publisher;
 static rcl_timer_t s_imu_timer;
 static rcl_publisher_t s_imu_publisher;
+#if YAW_CORRECTION
+static rcl_timer_t s_imu_latency_timer;
+static rcl_publisher_t s_imu_latency_publisher;
+static rcl_timer_t s_odom_latency_timer;
+static rcl_publisher_t s_odom_latency_publisher;
+#endif
 static rcl_subscription_t s_cmd_vel_subscriber;
 static rclc_parameter_server_t s_param_server;
 
@@ -56,18 +68,34 @@ static EventGroupHandle_t s_mros_evt_group;
 static EventGroupHandle_t s_mros_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_mros_err_bit;
 
-#define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 2 + 2 // PARAM HANDLES + 2 for timer +2 for subscription
+#if YAW_CORRECTION
+#define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 4 + 1 // PARAM HANDLES + 4 for timer + 1 for subscription
+#else
+#define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 2 + 1 // PARAM HANDLES + 2 for timer + 1 for subscription
+#endif
 
 static mros_cmd_vel_cb_t s_user_cmd_vel_cb;
 static void *s_user_cmd_vel_ctx;
 
+#if YAW_CORRECTION
+static rccar_msgs__msg__RccarCorr1Time2 s_cmd_vel_buffer;
+#else
 static geometry_msgs__msg__TwistStamped s_cmd_vel_buffer;
+#endif
 static QueueHandle_t s_odom_q;
 static QueueHandle_t s_imu_q;
+#if YAW_CORRECTION
+static QueueHandle_t s_odom_latency_q;
+static QueueHandle_t s_imu_latency_q;
+#endif
 
 static void internal_cmd_vel_callback(const void *msgin) {
     if (s_user_cmd_vel_cb) {
+#if YAW_CORRECTION
+        s_user_cmd_vel_cb((const rccar_msgs__msg__RccarCorr1Time2 *)msgin, s_user_cmd_vel_ctx);
+#else
         s_user_cmd_vel_cb((const geometry_msgs__msg__TwistStamped *)msgin, s_user_cmd_vel_ctx);
+#endif
     }
 }
 
@@ -102,6 +130,38 @@ static void imu_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
         return;
     }
 }
+
+#if YAW_CORRECTION
+static void odom_latency_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
+    ESP_UNUSED(timer);
+    ESP_UNUSED(last_call_time);
+    sensor_msgs__msg__TimeReference odom_latency_msg;
+    if (xQueuePeek(s_odom_latency_q, &odom_latency_msg, 0) != pdTRUE) {
+        ESP_LOGW(MROS_LOGGER_TAG, "No odometry latency data available in the queue");
+        return;
+    }
+
+    if (rcl_publish(&s_odom_latency_publisher, &odom_latency_msg, NULL) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to publish odometry latency");
+        return;
+    }
+}
+
+static void imu_latency_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
+    ESP_UNUSED(timer);
+    ESP_UNUSED(last_call_time);
+    sensor_msgs__msg__TimeReference imu_latency_msg;
+    if (xQueuePeek(s_imu_latency_q, &imu_latency_msg, 0) != pdTRUE) {
+        ESP_LOGW(MROS_LOGGER_TAG, "No IMU latency data available in the queue");
+        return;
+    }
+
+    if (rcl_publish(&s_imu_latency_publisher, &imu_latency_msg, NULL) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to publish IMU latency");
+        return;
+    }
+}
+#endif
 
 static bool on_parameter_changed_callback(const rcl_interfaces__msg__Parameter *old_param, const rcl_interfaces__msg__Parameter *new_param, void *context) {
     ESP_UNUSED(old_param);
@@ -281,6 +341,22 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     }
     ESP_LOGI(MROS_LOGGER_TAG, "IMU queue created");
 
+#if YAW_CORRECTION
+    s_odom_latency_q = xQueueCreate(1, sizeof(sensor_msgs__msg__TimeReference));
+    if (s_odom_latency_q == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to create odom latency queue");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Odom latency queue created");
+
+    s_imu_latency_q = xQueueCreate(1, sizeof(sensor_msgs__msg__TimeReference));
+    if (s_imu_latency_q == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to create IMU latency queue");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU latency queue created");
+#endif
+
     if (rmw_uros_ping_agent(1000, 5) != RMW_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "micro-ROS agent NOT reachable");
         return ESP_FAIL;
@@ -327,6 +403,32 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     }
     ESP_LOGI(MROS_LOGGER_TAG, "IMU timer initialized");
 
+#if YAW_CORRECTION
+    if (rclc_publisher_init_best_effort(&s_odom_latency_publisher, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, TimeReference), MROS_ODOM_LATENCY_TOPIC) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize odom latency publisher");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Odometry latency publisher initialized");
+
+    if (rclc_timer_init_default2(&s_odom_latency_timer, &s_support, RCL_MS_TO_NS(MROS_ODOM_LATENCY_PUBLISHER_PERIOD_MS), odom_latency_timer_callback, true) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize timer");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Timer initialized");
+
+    if (rclc_publisher_init_best_effort(&s_imu_latency_publisher, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, TimeReference), MROS_IMU_LATENCY_TOPIC) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize IMU latency publisher");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU latency publisher initialized");
+
+    if (rclc_timer_init_default2(&s_imu_latency_timer, &s_support, RCL_MS_TO_NS(MROS_IMU_LATENCY_PUBLISHER_PERIOD_MS), imu_latency_timer_callback, true) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize IMU latency timer");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU latency timer initialized");
+#endif
+
     if (rclc_parameter_server_init_default(&s_param_server, &s_node) != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize parameter server");
         return ESP_FAIL;
@@ -346,7 +448,12 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     ESP_LOGI(MROS_LOGGER_TAG, "Robot parameters registered to micro-ROS");
 
     //! When subscribing to a reliable topic that has a high publishing frequency, the acknowledgements might block other things in the executer
-    if (rclc_subscription_init_default(&s_cmd_vel_subscriber, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, TwistStamped), MROS_CMD_VEL_TOPIC) != RCL_RET_OK) {
+#if YAW_CORRECTION
+    if (rclc_subscription_init_default(&s_cmd_vel_subscriber, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(rccar_msgs, msg, RccarCorr1Time2), MROS_CMD_VEL_TOPIC) != RCL_RET_OK)
+#else
+    if (rclc_subscription_init_default(&s_cmd_vel_subscriber, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, TwistStamped), MROS_CMD_VEL_TOPIC) != RCL_RET_OK)
+#endif
+    {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize cmd_vel subscriber");
         return ESP_FAIL;
     }
@@ -382,6 +489,20 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
         return ESP_FAIL;
     }
     ESP_LOGI(MROS_LOGGER_TAG, "IMU timer added to executor");
+
+#if YAW_CORRECTION
+    if (rclc_executor_add_timer(&s_executor, &s_odom_latency_timer) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add odom latency timer to executor");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Odom latency timer added to executor");
+
+    if (rclc_executor_add_timer(&s_executor, &s_imu_latency_timer) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add IMU latency timer to executor");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "IMU latency timer added to executor");
+#endif
 
     s_mros_evt_group = xEventGroupCreate();
     if (!s_mros_evt_group) {
@@ -460,6 +581,14 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
     if (rcl_publisher_fini(&s_imu_publisher, &s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU publisher");
     }
+#if YAW_CORRECTION
+    if (rcl_publisher_fini(&s_odom_latency_publisher, &s_node) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize odom latency publisher");
+    }
+    if (rcl_publisher_fini(&s_imu_latency_publisher, &s_node) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU latency publisher");
+    }
+#endif
     if (rcl_subscription_fini(&s_cmd_vel_subscriber, &s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize cmd_vel subscriber");
     }
@@ -469,6 +598,14 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
     if (rcl_timer_fini(&s_imu_timer) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU timer");
     }
+#if YAW_CORRECTION
+    if (rcl_timer_fini(&s_odom_latency_timer) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize odom latency timer");
+    }
+    if (rcl_timer_fini(&s_imu_latency_timer) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU latency timer");
+    }
+#endif
     if (rcl_node_fini(&s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize node");
     }
@@ -489,6 +626,18 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
         s_imu_q = NULL;
     }
 
+#if YAW_CORRECTION
+    if (s_odom_latency_q) {
+        vQueueDelete(s_odom_latency_q);
+        s_odom_latency_q = NULL;
+    }
+
+    if (s_imu_latency_q) {
+        vQueueDelete(s_imu_latency_q);
+        s_imu_latency_q = NULL;
+    }
+#endif
+
     if (s_mros_exec_task_h) {
         vTaskDelete(s_mros_exec_task_h);
         s_mros_exec_task_h = NULL;
@@ -501,6 +650,10 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
 
     s_odom_q = NULL;
     s_imu_q = NULL;
+#if YAW_CORRECTION
+    s_odom_latency_q = NULL;
+    s_imu_latency_q = NULL;
+#endif
     s_mros_exec_task_h = NULL;
     s_mros_sync_task_h = NULL;
     s_user_cmd_vel_cb = NULL;
@@ -604,6 +757,68 @@ esp_err_t mros_peek_imu_msg(sensor_msgs__msg__Imu *imu_msg) {
     }
     return ESP_OK;
 }
+
+#if YAW_CORRECTION
+esp_err_t mros_update_imu_latency(sensor_msgs__msg__TimeReference *imu_latency_msg) {
+    if (xQueueOverwrite(s_imu_latency_q, imu_latency_msg) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to overwrite IMU latency queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mros_init_imu_latency_msg(sensor_msgs__msg__TimeReference *imu_latency_msg) {
+    if (imu_latency_msg == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Invalid argument to init_imu_latency_msg");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(imu_latency_msg, 0, sizeof(sensor_msgs__msg__TimeReference));
+
+    rosidl_runtime_c__String__assign(&imu_latency_msg->header.frame_id, MROS_IMU_LATENCY_FRAME_ID);
+    rosidl_runtime_c__String__assign(&imu_latency_msg->source, MROS_IMU_LATENCY_SOURCE);
+
+    return ESP_OK;
+}
+
+esp_err_t mros_peek_imu_latency_msg(sensor_msgs__msg__TimeReference *imu_latency_msg) {
+    if (xQueuePeek(s_imu_latency_q, imu_latency_msg, 0) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to peek IMU latency queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mros_update_odom_latency(sensor_msgs__msg__TimeReference *odom_latency_msg) {
+    if (xQueueOverwrite(s_odom_latency_q, odom_latency_msg) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to overwrite odom latency queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mros_init_odom_latency_msg(sensor_msgs__msg__TimeReference *odom_latency_msg) {
+    if (odom_latency_msg == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Invalid argument to init_odom_latency_msg");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(odom_latency_msg, 0, sizeof(sensor_msgs__msg__TimeReference));
+
+    rosidl_runtime_c__String__assign(&odom_latency_msg->header.frame_id, MROS_ODOM_LATENCY_FRAME_ID);
+    rosidl_runtime_c__String__assign(&odom_latency_msg->source, MROS_ODOM_LATENCY_SOURCE);
+
+    return ESP_OK;
+}
+
+esp_err_t mros_peek_odom_latency_msg(sensor_msgs__msg__TimeReference *odom_latency_msg) {
+    if (xQueuePeek(s_odom_latency_q, odom_latency_msg, 0) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to peek odom latency queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+#endif
 
 bool mros_is_agent_connected(void) { return xEventGroupGetBits(s_mros_evt_group) & MROS_AGENT_CONNECTED; }
 

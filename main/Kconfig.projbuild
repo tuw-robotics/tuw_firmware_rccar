@@ -81,6 +81,52 @@ menu "Application-specific settings"
 
             endmenu # IMU
 
+            menu "IMU LATENCY"
+                depends on YAW_CORRECTION
+
+                config MROS_IMU_LATENCY_TOPIC
+                    string "micro-ROS IMU LATENCY topic"
+                    default "imu_latency"
+
+                config MROS_IMU_LATENCY_FRAME_ID
+                    string "micro-ROS IMU LATENCY frame ID"
+                    default "imu_latency"
+
+                config MROS_IMU_LATENCY_SOURCE
+                    string "name of time source"
+                    default "imu_latency"
+
+                config MROS_IMU_LATENCY_PUBLISHER_PERIOD_MS
+                    int "IMU LATENCY publisher period (ms)"
+                    default 100
+                    help
+                        Rate at which IMU LATENCY messages are published.
+
+            endmenu # IMU LATENCY
+
+            menu "ODOM LATENCY"
+                depends on YAW_CORRECTION
+
+                config MROS_ODOM_LATENCY_TOPIC
+                    string "micro-ROS ODOM LATENCY topic"
+                    default "odom_latency"
+
+                config MROS_ODOM_LATENCY_FRAME_ID
+                    string "micro-ROS ODOM LATENCY frame ID"
+                    default "odom_latency"
+
+                config MROS_ODOM_LATENCY_SOURCE
+                    string "name of time source"
+                    default "odom_latency"
+
+                config MROS_ODOM_LATENCY_PUBLISHER_PERIOD_MS
+                    int "ODOM LATENCY publisher period (ms)"
+                    default 100
+                    help
+                        Rate at which ODOM LATENCY messages are published.
+
+            endmenu # ODOM LATENCY
+
         endmenu # Messages
 
         config MROS_NODE_NAME
@@ -95,7 +141,7 @@ menu "Application-specific settings"
 
         config MROS_CMD_VEL_TOPIC
             string "micro-ROS cmd_vel topic"
-            default "cmd_vel"
+            default "cmd_vel_corr"
 
         config MROS_BASE_FRAME_ID
             string "micro-ROS base frame ID"
@@ -194,6 +240,11 @@ menu "Application-specific settings"
         int "JTAG buffer size"
         range 0 1024
         default 1024
+
+    config YAW_CORRECTION
+        bool "Use yaw correction"
+        default y
+
     
 endmenu # Application-specific settings
     
