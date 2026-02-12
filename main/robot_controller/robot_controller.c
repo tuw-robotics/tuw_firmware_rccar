@@ -14,6 +14,12 @@
 #include <sdkconfig.h>
 #include <sys/time.h>
 
+#include "yaw_correction_used.h"
+
+#if YAW_CORRECTION
+#include <rccar_msgs/msg/rccar_corr1_time2.h>
+#endif
+
 #ifdef CONFIG_MROS_CMD_VEL_TIMEOUT_MS
 #define MROS_CMD_VEL_TIMEOUT_MS CONFIG_MROS_CMD_VEL_TIMEOUT_MS
 #else
@@ -38,7 +44,11 @@ static void base_control_task(void *pv) {
     ESP_UNUSED(pv);
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Base control task started");
 
+#if YAW_CORRECTION
+    rccar_msgs__msg__RccarCorr1Time2 cmd_vel_local;
+#else
     geometry_msgs__msg__TwistStamped cmd_vel_local;
+#endif
     builtin_interfaces__msg__Time time_current;
     builtin_interfaces__msg__Time time_last_cmd_delta;
 
@@ -128,17 +138,52 @@ static void base_control_task(void *pv) {
 
 // mros_cmd_vel_cb_t signature
 //! This is executed within the mros executor task
-void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *context) {
+#if YAW_CORRECTION
+void on_cmd_vel_callback(const rccar_msgs__msg__RccarCorr1Time2 *msg, void *context)
+#else
+void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *context)
+#endif
+{
     ESP_UNUSED(context);
 
     // use local time as the timesyncronisation sometimes is of for some ms and we may want tight timeout for the internal control task
+#if YAW_CORRECTION
+    rccar_msgs__msg__RccarCorr1Time2 msg_local = *msg;
+#else
     geometry_msgs__msg__TwistStamped msg_local = *msg;
-    msg_local.header.stamp = time_now();
+#endif
 
+    builtin_interfaces__msg__Time current_time = time_now();
+
+    msg_local.header.stamp = current_time;
     if (xQueueOverwrite(s_cmd_vel_q, &msg_local) != pdTRUE) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to overwrite cmd_vel queue");
         return;
     }
+
+#if YAW_CORRECTION
+    sensor_msgs__msg__TimeReference imu_latency, odom_latency;
+    if (mros_init_imu_latency_msg(&imu_latency) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init imu latency msg");
+        return;
+    }
+    if (mros_init_odom_latency_msg(&odom_latency) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init odom latency msg");
+        return;
+    }
+    imu_latency.header.stamp = current_time;
+    odom_latency.header.stamp = current_time;
+    imu_latency.time_ref = time_delta(&msg->timestamp_imu, &current_time);
+    odom_latency.time_ref = time_delta(&msg->timestamp_odom, &current_time);
+    if (mros_update_imu_latency(&imu_latency) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update imu latency");
+        return;
+    }
+    if (mros_update_odom_latency(&odom_latency) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update odom latency");
+        return;
+    }
+#endif
 }
 
 esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_context_t *odrive_mr_context, servo_t *servo_context, EventGroupHandle_t error_handle, EventBits_t error_bit) {
@@ -172,7 +217,11 @@ esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_cont
     }
     s_servo_context = servo_context;
 
+#if YAW_CORRECTION
+    s_cmd_vel_q = xQueueCreate(1, sizeof(rccar_msgs__msg__RccarCorr1Time2));
+#else
     s_cmd_vel_q = xQueueCreate(1, sizeof(geometry_msgs__msg__TwistStamped));
+#endif
     if (s_cmd_vel_q == NULL) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to create cmd_vel queue");
         return ESP_FAIL;

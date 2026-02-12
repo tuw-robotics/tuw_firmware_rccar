@@ -4,7 +4,7 @@
 
 1. Clone this repository
 2. Open the repo in a DevContainer
-3. In the root of the repository, run `idf.py set-target esp32c6`
+3. In the root of the repository, run `idf.py set-target esp32c6` and `make add-rccar_msgs`
 4. Connect to the ESP32-C6 board on the back of the car
    - Use the JTAG USB-C port for this, so that micro-ROS can use the UART port for communication
 5. You can run `idf.py build flash monitor -p /dev/ttyACM0` to build flash and monitor the system all through the JTAG port. When doing everything through the JTAG, the micro-ROS agent can stay running on ttyUSB0 without interference
