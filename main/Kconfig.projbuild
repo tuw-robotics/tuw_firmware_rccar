@@ -160,7 +160,29 @@ menu "Application-specific settings"
                 Maximum allowed time since last received cmd_vel message before stopping the robot.
 
     endmenu # micro-ROS application
-    
+   
+    menu "PID controller settings"
+    depends on YAW_CORRECTION
+
+        config PID_KP
+            int "PID proportional gain (Kp) x e3"
+            help 
+                Proportional gain for the PID controller for yaw correction, multiplied by 1000 to allow for fractional values.
+            default 1000
+
+        config PID_KI
+            int "PID integral gain (Ki) x e3"
+            help
+                Integral gain for the PID controller for yaw correction, multiplied by 1000 to allow for fractional values.
+            default 0
+
+        config PID_KD
+            int "PID derivative gain (Kd) x e3"
+            help
+                Derivative gain for the PID controller for yaw correction, multiplied by 1000 to allow for fractional values.
+            default 0
+
+    endmenu # PID controller settings
     
     menu "Robot kinematics"
 

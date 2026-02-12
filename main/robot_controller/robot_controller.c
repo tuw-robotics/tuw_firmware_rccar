@@ -40,6 +40,10 @@ static EventGroupHandle_t s_base_control_evt_group;
 static EventGroupHandle_t s_base_control_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_base_control_err_bit;
 
+#if YAW_CORRECTION
+sensor_msgs__msg__TimeReference imu_latency_msg, odom_latency_msg;
+#endif
+
 static void base_control_task(void *pv) {
     ESP_UNUSED(pv);
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Base control task started");
@@ -162,24 +166,15 @@ void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *cont
     }
 
 #if YAW_CORRECTION
-    sensor_msgs__msg__TimeReference imu_latency, odom_latency;
-    if (mros_init_imu_latency_msg(&imu_latency) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init imu latency msg");
-        return;
-    }
-    if (mros_init_odom_latency_msg(&odom_latency) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init odom latency msg");
-        return;
-    }
-    imu_latency.header.stamp = current_time;
-    odom_latency.header.stamp = current_time;
-    imu_latency.time_ref = time_delta(&msg->timestamp_imu, &current_time);
-    odom_latency.time_ref = time_delta(&msg->timestamp_odom, &current_time);
-    if (mros_update_imu_latency(&imu_latency) != ESP_OK) {
+    imu_latency_msg.header.stamp = current_time;
+    odom_latency_msg.header.stamp = current_time;
+    imu_latency_msg.time_ref = time_delta(&msg->timestamp_imu, &current_time);
+    odom_latency_msg.time_ref = time_delta(&msg->timestamp_odom, &current_time);
+    if (mros_update_imu_latency(&imu_latency_msg) != ESP_OK) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update imu latency");
         return;
     }
-    if (mros_update_odom_latency(&odom_latency) != ESP_OK) {
+    if (mros_update_odom_latency(&odom_latency_msg) != ESP_OK) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update odom latency");
         return;
     }
@@ -227,6 +222,20 @@ esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_cont
         return ESP_FAIL;
     }
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "cmd_vel queue created");
+
+#if YAW_CORRECTION
+    if (mros_init_imu_latency_msg(&imu_latency_msg) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init imu latency msg");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "IMU latency message initialized");
+
+    if (mros_init_odom_latency_msg(&odom_latency_msg) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init odom latency msg");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Odom latency message initialized");
+#endif
 
     if (!error_handle) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Invalid error handle");
