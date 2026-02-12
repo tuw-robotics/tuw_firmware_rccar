@@ -8,6 +8,8 @@
 #include <sdkconfig.h>
 #include <string.h>
 
+#include "yaw_correction_used.h"
+
 #define PARAM_NAMESPACE "robot_params"
 
 static robot_parameters_t robot_parameters = {0};
@@ -89,6 +91,35 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default wheel_base = %ld mm", robot_parameters.wheel_base);
     }
 
+#if YAW_CORRECTION
+    int32_t pid_kp;
+    if (load_int_from_nvs(&pid_kp, PID_KP_PARAM_NAME) == ESP_OK) {
+        robot_parameters.pid_kp = pid_kp / 1000.0; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_kp = %.3f from NVS", robot_parameters.pid_kp);
+    } else {
+        robot_parameters.pid_kp = PID_KP / 1000.0; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_kp = %.3f", robot_parameters.pid_kp);
+    }
+
+    int32_t pid_ki;
+    if (load_int_from_nvs(&pid_ki, PID_KI_PARAM_NAME) == ESP_OK) {
+        robot_parameters.pid_ki = pid_ki / 1000.0; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_ki = %.3f from NVS", robot_parameters.pid_ki);
+    } else {
+        robot_parameters.pid_ki = PID_KI / 1000.0; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_ki = %.3f", robot_parameters.pid_ki);
+    }
+
+    int32_t pid_kd;
+    if (load_int_from_nvs(&pid_kd, PID_KD_PARAM_NAME) == ESP_OK) {
+        robot_parameters.pid_kd = pid_kd / 1000.0; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_kd = %.3f from NVS", robot_parameters.pid_kd);
+    } else {
+        robot_parameters.pid_kd = PID_KD / 1000.0; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_kd = %.3f", robot_parameters.pid_kd);
+    }
+#endif
+
     xQueueOverwrite(robot_params_queue, &robot_parameters);
 
     return ESP_OK;
@@ -104,7 +135,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     }
     rc = rclc_parameter_set_int(server, ROBOT_WHEEL_RADIUS_PARAM_NAME, robot_parameters.wheel_radius);
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for 'example_int'");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for wheel radius");
         return ESP_FAIL;
     }
 
@@ -115,7 +146,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     }
     rc = rclc_parameter_set_int(server, ROBOT_TRACK_WIDTH_PARAM_NAME, robot_parameters.track_width);
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for 'example_int'");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for track width");
         return ESP_FAIL;
     }
 
@@ -126,9 +157,44 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     }
     rc = rclc_parameter_set_int(server, ROBOT_WHEEL_BASE_PARAM_NAME, robot_parameters.wheel_base);
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for 'example_int'");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for wheel base");
         return ESP_FAIL;
     }
+
+#if YAW_CORRECTION
+    rc = rclc_add_parameter(server, PID_KP_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add PID Kp parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, PID_KP_PARAM_NAME, (int32_t)(robot_parameters.pid_kp * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for PID Kp");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, PID_KI_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add PID Ki parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, PID_KI_PARAM_NAME, (int32_t)(robot_parameters.pid_ki * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for PID Ki");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, PID_KD_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add PID Kd parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, PID_KD_PARAM_NAME, (int32_t)(robot_parameters.pid_kd * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for PID Kd");
+        return ESP_FAIL;
+    }
+#endif
     ESP_LOGI(MROS_LOGGER_TAG, "Added all parameters to parameter server");
 
     return ESP_OK;
@@ -176,6 +242,43 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+#if YAW_CORRECTION
+    if (strcmp(new_param->name.data, PID_KP_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.pid_kp = new_param->value.integer_value / 1000.0; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.pid_kp * 1000), PID_KP_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Kp changed to %.3f", robot_parameters.pid_kp);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save PID Kp to NVS");
+            return false;
+        }
+    }
+
+    if (strcmp(new_param->name.data, PID_KI_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.pid_ki = new_param->value.integer_value / 1000.0; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.pid_ki * 1000), PID_KI_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Ki changed to %.3f", robot_parameters.pid_ki);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save PID Ki to NVS");
+            return false;
+        }
+    }
+
+    if (strcmp(new_param->name.data, PID_KD_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.pid_kd = new_param->value.integer_value / 1000.0; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.pid_kd * 1000), PID_KD_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Kd changed to %.3f", robot_parameters.pid_kd);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save PID Kd to NVS");
+            return false;
+        }
+    }
+#endif
     ESP_LOGW(MROS_LOGGER_TAG, "Unknown parameter %s", new_param->name.data);
     return false;
 }

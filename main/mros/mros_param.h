@@ -6,6 +6,8 @@
 #include <rclc_parameter/rclc_parameter.h>
 #include <sdkconfig.h>
 
+#include "yaw_correction_used.h"
+
 #ifdef CONFIG_ROBOT_WHEEL_RADIUS_MM
 #define ROBOT_WHEEL_RADIUS_MM CONFIG_ROBOT_WHEEL_RADIUS_MM
 #else
@@ -43,15 +45,48 @@
 #define ROBOT_WHEEL_BASE_PARAM_NAME "whl_base_mm"
 #endif
 
+#if YAW_CORRECTION
+#ifdef CONFIG_PID_KP
+#define PID_KP CONFIG_PID_KP
+#else
+#define PID_KP 1000
+#endif
+#define PID_KP_PARAM_NAME "pid_kp"
+
+#ifdef CONFIG_PID_KI
+#define PID_KI CONFIG_PID_KI
+#else
+#define PID_KI 0
+#endif
+#define PID_KI_PARAM_NAME "pid_ki"
+
+#ifdef CONFIG_PID_KD
+#define PID_KD CONFIG_PID_KD
+#else
+#define PID_KD 0
+#endif
+#define PID_KD_PARAM_NAME "pid_kd"
+#endif
+
 // Check if names are too long
 _Static_assert(sizeof(ROBOT_WHEEL_RADIUS_PARAM_NAME) <= 15, "ROBOT_WHEEL_RADIUS_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(ROBOT_TRACK_WIDTH_PARAM_NAME) <= 15, "ROBOT_TRACK_WIDTH_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(ROBOT_WHEEL_BASE_PARAM_NAME) <= 15, "ROBOT_WHEEL_BASE_PARAM_NAME must not exceed 15 characters");
+#if YAW_CORRECTION
+_Static_assert(sizeof(PID_KP_PARAM_NAME) <= 15, "PID_KP_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(PID_KI_PARAM_NAME) <= 15, "PID_KI_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(PID_KD_PARAM_NAME) <= 15, "PID_KD_PARAM_NAME must not exceed 15 characters");
+#endif
 
 typedef struct {
     int32_t track_width;
     int32_t wheel_radius;
     int32_t wheel_base;
+#if YAW_CORRECTION
+    float pid_kp;
+    float pid_ki;
+    float pid_kd;
+#endif
 } robot_parameters_t;
 
 /**
