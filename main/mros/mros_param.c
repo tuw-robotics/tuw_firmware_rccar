@@ -94,28 +94,28 @@ esp_err_t robot_parameters_init(void) {
 #if YAW_CORRECTION
     int32_t pid_kp;
     if (load_int_from_nvs(&pid_kp, PID_KP_PARAM_NAME) == ESP_OK) {
-        robot_parameters.pid_kp = pid_kp / 1000.0; // Convert back to float
+        robot_parameters.pid_kp = (float)pid_kp / 1000.0f; // Convert back to float
         ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_kp = %.3f from NVS", robot_parameters.pid_kp);
     } else {
-        robot_parameters.pid_kp = PID_KP / 1000.0; // Convert back to float
+        robot_parameters.pid_kp = (float)PID_KP / 1000.0f; // Convert back to float
         ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_kp = %.3f", robot_parameters.pid_kp);
     }
 
     int32_t pid_ki;
     if (load_int_from_nvs(&pid_ki, PID_KI_PARAM_NAME) == ESP_OK) {
-        robot_parameters.pid_ki = pid_ki / 1000.0; // Convert back to float
+        robot_parameters.pid_ki = (float)pid_ki / 1000.0f; // Convert back to float
         ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_ki = %.3f from NVS", robot_parameters.pid_ki);
     } else {
-        robot_parameters.pid_ki = PID_KI / 1000.0; // Convert back to float
+        robot_parameters.pid_ki = (float)PID_KI / 1000.0f; // Convert back to float
         ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_ki = %.3f", robot_parameters.pid_ki);
     }
 
     int32_t pid_kd;
     if (load_int_from_nvs(&pid_kd, PID_KD_PARAM_NAME) == ESP_OK) {
-        robot_parameters.pid_kd = pid_kd / 1000.0; // Convert back to float
+        robot_parameters.pid_kd = (float)pid_kd / 1000.0f; // Convert back to float
         ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_kd = %.3f from NVS", robot_parameters.pid_kd);
     } else {
-        robot_parameters.pid_kd = PID_KD / 1000.0; // Convert back to float
+        robot_parameters.pid_kd = (float)PID_KD / 1000.0f; // Convert back to float
         ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_kd = %.3f", robot_parameters.pid_kd);
     }
 #endif
@@ -244,7 +244,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
 
 #if YAW_CORRECTION
     if (strcmp(new_param->name.data, PID_KP_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.pid_kp = new_param->value.integer_value / 1000.0; // Convert back to float
+        robot_parameters.pid_kp = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
         if (save_int_to_nvs((int32_t)(robot_parameters.pid_kp * 1000), PID_KP_PARAM_NAME) == ESP_OK) {
             ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Kp changed to %.3f", robot_parameters.pid_kp);
@@ -256,7 +256,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
     }
 
     if (strcmp(new_param->name.data, PID_KI_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.pid_ki = new_param->value.integer_value / 1000.0; // Convert back to float
+        robot_parameters.pid_ki = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
         if (save_int_to_nvs((int32_t)(robot_parameters.pid_ki * 1000), PID_KI_PARAM_NAME) == ESP_OK) {
             ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Ki changed to %.3f", robot_parameters.pid_ki);
@@ -268,7 +268,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
     }
 
     if (strcmp(new_param->name.data, PID_KD_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.pid_kd = new_param->value.integer_value / 1000.0; // Convert back to float
+        robot_parameters.pid_kd = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
         if (save_int_to_nvs((int32_t)(robot_parameters.pid_kd * 1000), PID_KD_PARAM_NAME) == ESP_OK) {
             ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Kd changed to %.3f", robot_parameters.pid_kd);

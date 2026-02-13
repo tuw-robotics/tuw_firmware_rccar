@@ -14,6 +14,9 @@
 #define MM_TO_M(a) ((a) / 1000.0f)
 #define M_TO_MM(a) ((a) * 1000.0f)
 
+#define CLAMP(x, lo, hi) ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 /**
  * @brief Convert Euler angles (roll, pitch, yaw) to a quaternion representation
  *
@@ -39,6 +42,17 @@ void math_euler_to_quaternion(float roll, float pitch, float yaw, float *qx, flo
  * @param yaw
  */
 void math_quaternion_to_euler(float qx, float qy, float qz, float qw, float *roll, float *pitch, float *yaw);
+
+/**
+ * @brief Convert a quaternion representation to yaw
+ *
+ * @param qx
+ * @param qy
+ * @param qz
+ * @param qw
+ * @return float
+ */
+float math_quaternion_to_yaw(float qx, float qy, float qz, float qw);
 
 /**
  * @brief Normalize an angle to the range [-pi, pi]

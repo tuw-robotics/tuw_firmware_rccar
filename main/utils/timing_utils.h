@@ -42,4 +42,38 @@ builtin_interfaces__msg__Time time_delta(const builtin_interfaces__msg__Time *st
  */
 builtin_interfaces__msg__Time time_now();
 
+/**
+ * @brief Add two time msgs
+ *
+ * @param summand_1 time msg 1
+ * @param summand_2 time msg 2
+ * @return builtin_interfaces__msg__Time
+ */
+builtin_interfaces__msg__Time time_add(const builtin_interfaces__msg__Time *summand_1, const builtin_interfaces__msg__Time *summand_2);
+
+/**
+ * @brief Creates out of nanoseconds a time msg.
+ *
+ * @param nanoseconds
+ * @return builtin_interfaces__msg__Time
+ */
+builtin_interfaces__msg__Time time_ns_to_time_msg(uint64_t nanoseconds);
+
+/**
+ * @brief Max of two time msgs
+ *
+ * @param time_1
+ * @param time_2
+ * @return builtin_interfaces__msg__Time
+ */
+builtin_interfaces__msg__Time time_max(const builtin_interfaces__msg__Time *time_1, const builtin_interfaces__msg__Time *time_2);
+
+/**
+ * @brief Returns time msg as microseconds
+ *
+ * @param time
+ * @return uint64_t
+ */
+uint64_t time_to_us(const builtin_interfaces__msg__Time *time);
+
 #endif // TIMING_UTILS_H

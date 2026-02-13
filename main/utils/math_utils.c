@@ -34,6 +34,12 @@ void math_quaternion_to_euler(float qx, float qy, float qz, float qw, float *rol
     *yaw = atan2f(siny_cosp, cosy_cosp);
 }
 
+float math_quaternion_to_yaw(float qx, float qy, float qz, float qw) {
+    float siny_cosp = 2.0f * (qw * qz + qx * qy);
+    float cosy_cosp = 1.0f - 2.0f * (qy * qy + qz * qz);
+    return atan2f(siny_cosp, cosy_cosp);
+}
+
 float math_normalize_angle(float angle) {
     angle = fmodf(angle + M_PI, 2.0f * M_PI);
     if (angle < 0.0f) {

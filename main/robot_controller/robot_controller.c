@@ -2,14 +2,17 @@
 
 #include "kinematics/kinematics.h"
 #include "mros/mros.h"
+#include "mros/mros_param.h"
 #include "odrive/odrive.h"
 #include "odrive/odrive_types.h"
 #include "servo/servo.h"
+#include "utils/math_utils.h"
 #include "utils/timing_utils.h"
 
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <geometry_msgs/msg/twist_stamped.h>
+#include <math.h>
 #include <nav_msgs/msg/odometry.h>
 #include <sdkconfig.h>
 #include <sys/time.h>
@@ -50,6 +53,19 @@ static void base_control_task(void *pv) {
 
 #if YAW_CORRECTION
     rccar_msgs__msg__RccarCorr1Time2 cmd_vel_local;
+    sensor_msgs__msg__Imu imu_local;
+    builtin_interfaces__msg__Time publish_period = time_ns_to_time_msg(US_TO_NS(MS_TO_US((uint64_t)YAW_CORRECTION_PERIOD)));
+    float current_yaw, yaw_to_correct, needed_yaw_rate, current_yaw_rate, time_for_calc_sec, yaw_rate_error;
+    builtin_interfaces__msg__Time remaining_time, time_for_calc;
+    builtin_interfaces__msg__Time min_time_calc = {.sec = 0, .nanosec = 1000000};
+    robot_parameters_t params_local;
+    float p_term, d_term, i_term = 0;
+    builtin_interfaces__msg__Time d_term_time;
+    float d_term_time_sec;
+    float last_yaw_rate_error;
+    builtin_interfaces__msg__Time last_time;
+    bool pid_has_state = false;
+    float yaw_rate_cmd;
 #else
     geometry_msgs__msg__TwistStamped cmd_vel_local;
 #endif
@@ -83,6 +99,10 @@ static void base_control_task(void *pv) {
         time_last_cmd_delta = time_delta(&cmd_vel_local.header.stamp, &time_current);
         // stop if timeout exceeded
         if (S_TO_MS(time_last_cmd_delta.sec) + US_TO_MS(NS_SUBS_TO_USEC(time_last_cmd_delta.nanosec)) > MROS_CMD_VEL_TIMEOUT_MS) {
+#if YAW_CORRECTION
+            pid_has_state = false;
+            i_term = 0;
+#endif
             if (odrive_set_velocity(s_odrive_ml_context, 0.0f, torque_ff_ml) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
                 break;
@@ -93,9 +113,64 @@ static void base_control_task(void *pv) {
             }
         } else {
             // normal operation
-            ik_input.vel_x = cmd_vel_local.twist.linear.x;
-            ik_input.omega_z = cmd_vel_local.twist.angular.z;
 
+#if YAW_CORRECTION
+            if (cmd_vel_local.yaw_direction >= -M_PI && cmd_vel_local.yaw_direction <= M_PI) { // only vaid if in [-pi; pi]
+                // try to get imu msg -> if fail use cmd_vel.twsit for inverse kinematic
+                if (mros_peek_imu_msg(&imu_local) != ESP_OK) {
+                    ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to peek IMU msg.");
+                    ik_input.omega_z = cmd_vel_local.twist.angular.z;
+                    pid_has_state = false;
+                    i_term = 0;
+                    goto motor_set;
+                }
+
+                current_yaw = math_quaternion_to_yaw(imu_local.orientation.x, imu_local.orientation.y, imu_local.orientation.z, imu_local.orientation.w);
+                current_yaw_rate = (float)imu_local.angular_velocity.z;
+                yaw_to_correct = math_normalize_angle(cmd_vel_local.yaw_direction - current_yaw);
+                remaining_time = time_delta(&time_last_cmd_delta, &publish_period);
+                time_for_calc = time_max(&remaining_time, &min_time_calc);
+                time_for_calc_sec = (float)time_to_us(&time_for_calc) * 1e-6f;
+                needed_yaw_rate = (float)((double)yaw_to_correct / (double)time_for_calc_sec);
+                // clamp it for security
+                needed_yaw_rate = CLAMP(needed_yaw_rate, -2.0f, +2.0f);
+                yaw_rate_error = needed_yaw_rate - current_yaw_rate;
+
+                if (robot_parameters_get(&params_local) != ESP_OK) {
+                    params_local.pid_kp = (float)PID_KP / 1000.0f;
+                    params_local.pid_ki = (float)PID_KI / 1000.0f;
+                    params_local.pid_kd = (float)PID_KD / 1000.0f;
+                }
+
+                p_term = params_local.pid_kp * yaw_rate_error;
+                if (pid_has_state == false) {
+                    i_term = 0.0f;
+                    d_term = 0.0f;
+                } else {
+                    d_term_time = time_delta(&last_time, &time_current);
+                    d_term_time_sec = (float)time_to_us(&d_term_time) * 1e-6f;
+                    d_term = params_local.pid_kd * (yaw_rate_error - last_yaw_rate_error) / MAX(d_term_time_sec, 1e-3f);
+                    i_term += params_local.pid_ki * yaw_rate_error * d_term_time_sec;
+                    i_term = CLAMP(i_term, -2.0f - p_term - d_term, 2.0f - p_term - d_term);
+                }
+                last_yaw_rate_error = yaw_rate_error;
+                last_time = time_current;
+                pid_has_state = true;
+
+                yaw_rate_cmd = CLAMP(p_term + i_term + d_term, -2.0f, 2.0f);
+                ik_input.omega_z = yaw_rate_cmd;
+
+            } else {
+                pid_has_state = false;
+                i_term = 0;
+                ik_input.omega_z = cmd_vel_local.twist.angular.z;
+            }
+#else
+            ik_input.omega_z = cmd_vel_local.twist.angular.z;
+#endif
+            ik_input.vel_x = cmd_vel_local.twist.linear.x;
+
+        motor_set:
             if (inverse_kinematics(&ik_input, &ik_output) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate inverse kinematics");
                 return;

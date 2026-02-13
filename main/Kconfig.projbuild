@@ -267,6 +267,11 @@ menu "Application-specific settings"
         bool "Use yaw correction"
         default y
 
+    config YAW_CORRECTION_PERIOD
+        depends on YAW_CORRECTION
+        int "Period in which the cmd_vel msgs are published (ms)"
+        default 100
+
     
 endmenu # Application-specific settings
     
