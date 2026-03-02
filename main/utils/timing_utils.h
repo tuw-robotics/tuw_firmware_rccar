@@ -22,6 +22,7 @@ typedef uint64_t monotonic_timestamp_t;
 #define US_TO_MS(x) ((x) / 1000LL)
 #define US_TO_NS(x) ((x) * 1000LL)
 #define US_TO_TICKS(x) (US_TO_MS(x) / portTICK_PERIOD_MS)
+#define US_TO_S(x) ((x) * 1e-6f)
 
 #define NS_TO_S(ns) ((ns) / 1000000000LL)
 #define NS_SUBS_TO_USEC(ns) (((ns) % 1000000000LL) / 1000LL)

@@ -149,7 +149,7 @@ menu "Application-specific settings"
 
         config MROS_UART_BAUDRATE
             int "UART baudrate"
-            default 115200
+            default 460800
             help
                 Baudrate of UART for MROS agent communication.
 
@@ -267,7 +267,7 @@ menu "Application-specific settings"
         bool "Use yaw correction"
         default y
 
-    config YAW_CORRECTION_PERIOD
+    config YAW_CORRECTION_PERIOD_MS
         depends on YAW_CORRECTION
         int "Period in which the cmd_vel msgs are published (ms)"
         default 100
