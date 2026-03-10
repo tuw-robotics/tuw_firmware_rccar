@@ -57,6 +57,7 @@ static void base_control_task(void *pv) {
     float yaw_err, current_yaw, remaining_us, yaw_rate_needed;
     robot_parameters_t params_local;
     float yaw_rate_cmd, user_suppress, k;
+    bool correction_on = false;
 #else
     geometry_msgs__msg__TwistStamped cmd_vel_local;
 #endif
@@ -120,7 +121,13 @@ static void base_control_task(void *pv) {
                     yaw_err = math_normalize_angle(cmd_vel_local.yaw_direction - current_yaw);
                     remaining_us = (float)MAX(MS_TO_US((float)YAW_CORRECTION_PERIOD_MS) - last_time_cmd_delta_us, 20000.0f);
                     yaw_rate_needed = CLAMP((float)((double)yaw_err / (double)US_TO_S(remaining_us)), -2.0f, 2.0f);
-                    if (fabsf(yaw_err) < 0.035f) { // do not correct small errors -> no jittering (maybe make a hysterese (on > 2 grad, off < 1.5 grad))
+                    if (correction_on == true && fabsf(yaw_err) < 0.026f) { // // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
+                        correction_on = false;
+                    }
+                    if (correction_on == false && fabsf(yaw_err) > 0.035f) {
+                        correction_on = true;
+                    }
+                    if (correction_on == false) {
                         yaw_rate_needed = 0;
                     }
                     user_suppress = CLAMP(1.0f - (fabsf((float)cmd_vel_local.twist.angular.z) / 2.0f), 0.0f, 1.0f); // suppress correction when user is turning
