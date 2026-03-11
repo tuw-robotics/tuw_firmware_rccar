@@ -57,7 +57,7 @@ static void base_control_task(void *pv) {
     float yaw_err, current_yaw, remaining_us, yaw_rate_needed;
     robot_parameters_t params_local;
     float yaw_rate_cmd, user_suppress, k;
-    bool correction_on = false;
+    float correction_on = 0.0f;
 #else
     geometry_msgs__msg__TwistStamped cmd_vel_local;
 #endif
@@ -121,18 +121,16 @@ static void base_control_task(void *pv) {
                     yaw_err = math_normalize_angle(cmd_vel_local.yaw_direction - current_yaw);
                     remaining_us = (float)MAX(MS_TO_US((float)YAW_CORRECTION_PERIOD_MS) - last_time_cmd_delta_us, 20000.0f);
                     yaw_rate_needed = CLAMP((float)((double)yaw_err / (double)US_TO_S(remaining_us)), -2.0f, 2.0f);
-                    if (correction_on == true && fabsf(yaw_err) < 0.026f) { // // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
-                        correction_on = false;
+                    // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
+                    if (correction_on == 1.0f && fabsf(yaw_err) < 0.026f) { // turn off
+                        correction_on = 0.0f;
                     }
-                    if (correction_on == false && fabsf(yaw_err) > 0.035f) {
-                        correction_on = true;
-                    }
-                    if (correction_on == false) {
-                        yaw_rate_needed = 0;
+                    if (correction_on == 0.0f && fabsf(yaw_err) > 0.035f) { // turn on
+                        correction_on = 1.0f;
                     }
                     user_suppress = CLAMP(1.0f - (fabsf((float)cmd_vel_local.twist.angular.z) / 2.0f), 0.0f, 1.0f); // suppress correction when user is turning
-                    k = CLAMP(user_suppress * params_local.pid_kp, 0.0f, 1.0f);
-                    yaw_rate_cmd = CLAMP((float)cmd_vel_local.twist.angular.z + k * (yaw_rate_needed - (float)cmd_vel_local.twist.angular.z), -2.0f, 2.0f); // k * needed + user * (1 - k)
+                    k = CLAMP(correction_on * user_suppress * params_local.pid_kp, 0.0f, 1.0f);
+                    yaw_rate_cmd = CLAMP((float)cmd_vel_local.twist.angular.z + k * (yaw_rate_needed - (float)cmd_vel_local.twist.angular.z), -2.0f, 2.0f); // k * needed + (1 - k) * user
                     ik_input.omega_z = yaw_rate_cmd;
                 }
             } else {
