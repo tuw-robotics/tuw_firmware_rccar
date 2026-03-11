@@ -4,9 +4,9 @@
 		"context": "..",
 		"dockerfile": "Dockerfile"
 	},
-	"containerEnv": {
-		"TZ": "${localEnv:TZ}"
-	},
+	// "containerEnv": {
+	// 	"TZ": "${localEnv:TZ}"
+	// },
 	"runArgs": [
 		"--privileged",
 		"--volume=/dev:/dev",
