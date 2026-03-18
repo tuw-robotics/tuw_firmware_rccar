@@ -114,56 +114,6 @@ esp_err_t mros_update_imu(sensor_msgs__msg__Imu *imu_msg);
  */
 esp_err_t mros_peek_imu_msg(sensor_msgs__msg__Imu *imu_msg);
 
-#if YAW_CORRECTION
-/**
- * @brief Updates the IMU latency message
- *
- * @param imu_latency_msg Pointer to the IMU latency message to be updated
- * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue overwrite fails
- */
-esp_err_t mros_update_imu_latency(sensor_msgs__msg__TimeReference *imu_latency_msg);
-
-/**
- * @brief Initializes the IMU latency message
- *
- * @param imu_latency_msg Pointer to the IMU latency message to be initialized
- * @return esp_err_t ESP_OK on success, ESP_ERR_INVALID_ARG if imu_latency_msg is NULL
- */
-esp_err_t mros_init_imu_latency_msg(sensor_msgs__msg__TimeReference *imu_latency_msg);
-
-/**
- * @brief Peeks the latest IMU latency message without removing it from the queue
- *
- * @param imu_latency_msg Pointer to the IMU latency message to be filled
- * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue peek fails
- */
-esp_err_t mros_peek_imu_latency_msg(sensor_msgs__msg__TimeReference *imu_latency_msg);
-
-/**
- * @brief Updates the odom latency message
- *
- * @param odom_latency_msg Pointer to the odom latency message to be updated
- * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue overwrite fails
- */
-esp_err_t mros_update_odom_latency(sensor_msgs__msg__TimeReference *odom_latency_msg);
-
-/**
- * @brief Initializes the odom latency message
- *
- * @param odom_latency_msg Pointer to the odom latency message to be initialized
- * @return esp_err_t ESP_OK on success, ESP_ERR_INVALID_ARG if odom_latency_msg is NULL
- */
-esp_err_t mros_init_odom_latency_msg(sensor_msgs__msg__TimeReference *odom_latency_msg);
-
-/**
- * @brief Peeks the latest odom latency message without removing it from the queue
- *
- * @param odom_latency_msg Pointer to the odom latency message to be filled
- * @return esp_err_t ESP_OK on success, ESP_FAIL if the queue peek fails
- */
-esp_err_t mros_peek_odom_latency_msg(sensor_msgs__msg__TimeReference *odom_latency_msg);
-#endif
-
 /**
  * @brief Checks if the MROS agent is connected
  *

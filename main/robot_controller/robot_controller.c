@@ -43,10 +43,6 @@ static EventGroupHandle_t s_base_control_evt_group;
 static EventGroupHandle_t s_base_control_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_base_control_err_bit;
 
-#if YAW_CORRECTION
-static sensor_msgs__msg__TimeReference imu_latency_msg, odom_latency_msg;
-#endif
-
 static void base_control_task(void *pv) {
     ESP_UNUSED(pv);
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Base control task started");
@@ -112,9 +108,7 @@ static void base_control_task(void *pv) {
                     ik_input.omega_z = cmd_vel_local.twist.angular.z;
                 } else {
                     if (robot_parameters_get(&params_local) != ESP_OK) {
-                        params_local.pid_kp = (float)PID_KP / 1000.0f;
-                        params_local.pid_ki = (float)PID_KI / 1000.0f;
-                        params_local.pid_kd = (float)PID_KD / 1000.0f;
+                        robot_parameters_get_preconfigured(&params_local);
                     }
 
                     current_yaw = math_normalize_angle(math_quaternion_to_yaw(imu_local.orientation.x, imu_local.orientation.y, imu_local.orientation.z, imu_local.orientation.w));
@@ -122,14 +116,14 @@ static void base_control_task(void *pv) {
                     remaining_us = (float)MAX(MS_TO_US((float)YAW_CORRECTION_PERIOD_MS) - last_time_cmd_delta_us, 20000.0f);
                     yaw_rate_needed = CLAMP((float)((double)yaw_err / (double)US_TO_S(remaining_us)), -2.0f, 2.0f);
                     // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
-                    if (correction_on == 1.0f && fabsf(yaw_err) < 0.026f) { // turn off
+                    if (correction_on == 1.0f && fabsf(yaw_err) < params_local.deadbeat_end) { // turn off
                         correction_on = 0.0f;
                     }
-                    if (correction_on == 0.0f && fabsf(yaw_err) > 0.035f) { // turn on
+                    if (correction_on == 0.0f && fabsf(yaw_err) > params_local.deadbeat_start) { // turn on
                         correction_on = 1.0f;
                     }
-                    user_suppress = CLAMP(1.0f - (fabsf((float)cmd_vel_local.twist.angular.z) / 2.0f), 0.0f, 1.0f); // suppress correction when user is turning
-                    k = CLAMP(correction_on * user_suppress * params_local.pid_kp, 0.0f, 1.0f);
+                    user_suppress = CLAMP(1.0f - (fabsf((float)cmd_vel_local.twist.angular.z) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
+                    k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
                     yaw_rate_cmd = CLAMP((float)cmd_vel_local.twist.angular.z + k * (yaw_rate_needed - (float)cmd_vel_local.twist.angular.z), -2.0f, 2.0f); // k * needed + (1 - k) * user
                     ik_input.omega_z = yaw_rate_cmd;
                 }
@@ -209,21 +203,6 @@ void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *cont
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to overwrite cmd_vel queue");
         return;
     }
-
-#if YAW_CORRECTION
-    imu_latency_msg.header.stamp = current_time;
-    odom_latency_msg.header.stamp = current_time;
-    imu_latency_msg.time_ref = time_delta(&msg->timestamp_imu, &current_time);
-    odom_latency_msg.time_ref = time_delta(&msg->timestamp_odom, &current_time);
-    if (mros_update_imu_latency(&imu_latency_msg) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update imu latency");
-        return;
-    }
-    if (mros_update_odom_latency(&odom_latency_msg) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update odom latency");
-        return;
-    }
-#endif
 }
 
 esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_context_t *odrive_mr_context, servo_t *servo_context, EventGroupHandle_t error_handle, EventBits_t error_bit) {
@@ -267,20 +246,6 @@ esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_cont
         return ESP_FAIL;
     }
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "cmd_vel queue created");
-
-#if YAW_CORRECTION
-    if (mros_init_imu_latency_msg(&imu_latency_msg) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init imu latency msg");
-        return ESP_FAIL;
-    }
-    ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "IMU latency message initialized");
-
-    if (mros_init_odom_latency_msg(&odom_latency_msg) != ESP_OK) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to init odom latency msg");
-        return ESP_FAIL;
-    }
-    ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Odom latency message initialized");
-#endif
 
     if (!error_handle) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Invalid error handle");

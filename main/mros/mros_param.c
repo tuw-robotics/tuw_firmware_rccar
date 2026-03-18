@@ -8,8 +8,6 @@
 #include <sdkconfig.h>
 #include <string.h>
 
-#include "yaw_correction_used.h"
-
 #define PARAM_NAMESPACE "robot_params"
 
 static robot_parameters_t robot_parameters = {0};
@@ -91,34 +89,41 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default wheel_base = %ld mm", robot_parameters.wheel_base);
     }
 
-#if YAW_CORRECTION
-    int32_t pid_kp;
-    if (load_int_from_nvs(&pid_kp, PID_KP_PARAM_NAME) == ESP_OK) {
-        robot_parameters.pid_kp = (float)pid_kp / 1000.0f; // Convert back to float
-        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_kp = %.3f from NVS", robot_parameters.pid_kp);
+    int32_t max_ang_vel;
+    if (load_int_from_nvs(&max_ang_vel, MAX_ANG_VEL_PARAM_NAME) == ESP_OK) {
+        robot_parameters.max_angular_velocity = (float)max_ang_vel / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded max_angular_velocity = %.3f from NVS", robot_parameters.max_angular_velocity);
     } else {
-        robot_parameters.pid_kp = (float)PID_KP / 1000.0f; // Convert back to float
-        ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_kp = %.3f", robot_parameters.pid_kp);
+        robot_parameters.max_angular_velocity = (float)MAX_ANG_VEL / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default max_angular_velocity = %.3f", robot_parameters.max_angular_velocity);
     }
 
-    int32_t pid_ki;
-    if (load_int_from_nvs(&pid_ki, PID_KI_PARAM_NAME) == ESP_OK) {
-        robot_parameters.pid_ki = (float)pid_ki / 1000.0f; // Convert back to float
-        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_ki = %.3f from NVS", robot_parameters.pid_ki);
+    int32_t corr_weight;
+    if (load_int_from_nvs(&corr_weight, CORR_WEIGHT_PARAM_NAME) == ESP_OK) {
+        robot_parameters.correction_weight = (float)corr_weight / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded correction_weight = %.3f from NVS", robot_parameters.correction_weight);
     } else {
-        robot_parameters.pid_ki = (float)PID_KI / 1000.0f; // Convert back to float
-        ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_ki = %.3f", robot_parameters.pid_ki);
+        robot_parameters.correction_weight = (float)CORR_WEIGHT / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default correction_weight = %.3f", robot_parameters.correction_weight);
     }
 
-    int32_t pid_kd;
-    if (load_int_from_nvs(&pid_kd, PID_KD_PARAM_NAME) == ESP_OK) {
-        robot_parameters.pid_kd = (float)pid_kd / 1000.0f; // Convert back to float
-        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pid_kd = %.3f from NVS", robot_parameters.pid_kd);
+    int32_t db_start;
+    if (load_int_from_nvs(&db_start, DEADBEAT_START_PARAM_NAME) == ESP_OK) {
+        robot_parameters.deadbeat_start = (float)db_start / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded deadbeat_start = %.3f from NVS", robot_parameters.deadbeat_start);
     } else {
-        robot_parameters.pid_kd = (float)PID_KD / 1000.0f; // Convert back to float
-        ESP_LOGW(MROS_LOGGER_TAG, "Using default pid_kd = %.3f", robot_parameters.pid_kd);
+        robot_parameters.deadbeat_start = (float)DEADBEAT_START / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default deadbeat_start = %.3f", robot_parameters.deadbeat_start);
     }
-#endif
+
+    int32_t db_end;
+    if (load_int_from_nvs(&db_end, DEADBEAT_END_PARAM_NAME) == ESP_OK) {
+        robot_parameters.deadbeat_end = (float)db_end / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded deadbeat_end = %.3f from NVS", robot_parameters.deadbeat_end);
+    } else {
+        robot_parameters.deadbeat_end = (float)DEADBEAT_END / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default deadbeat_end = %.3f", robot_parameters.deadbeat_end);
+    }
 
     xQueueOverwrite(robot_params_queue, &robot_parameters);
 
@@ -161,40 +166,50 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
-#if YAW_CORRECTION
-    rc = rclc_add_parameter(server, PID_KP_PARAM_NAME, RCLC_PARAMETER_INT);
+    rc = rclc_add_parameter(server, MAX_ANG_VEL_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add PID Kp parameter");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add max angular velocity parameter");
         return ESP_FAIL;
     }
-    rc = rclc_parameter_set_int(server, PID_KP_PARAM_NAME, (int32_t)(robot_parameters.pid_kp * 1000)); // Convert to int
+    rc = rclc_parameter_set_int(server, MAX_ANG_VEL_PARAM_NAME, (int32_t)(robot_parameters.max_angular_velocity * 1000)); // Convert to int
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for PID Kp");
-        return ESP_FAIL;
-    }
-
-    rc = rclc_add_parameter(server, PID_KI_PARAM_NAME, RCLC_PARAMETER_INT);
-    if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add PID Ki parameter");
-        return ESP_FAIL;
-    }
-    rc = rclc_parameter_set_int(server, PID_KI_PARAM_NAME, (int32_t)(robot_parameters.pid_ki * 1000)); // Convert to int
-    if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for PID Ki");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for max angular velocity");
         return ESP_FAIL;
     }
 
-    rc = rclc_add_parameter(server, PID_KD_PARAM_NAME, RCLC_PARAMETER_INT);
+    rc = rclc_add_parameter(server, CORR_WEIGHT_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add PID Kd parameter");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add correction weight parameter");
         return ESP_FAIL;
     }
-    rc = rclc_parameter_set_int(server, PID_KD_PARAM_NAME, (int32_t)(robot_parameters.pid_kd * 1000)); // Convert to int
+    rc = rclc_parameter_set_int(server, CORR_WEIGHT_PARAM_NAME, (int32_t)(robot_parameters.correction_weight * 1000)); // Convert to int
     if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for PID Kd");
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for correction weight");
         return ESP_FAIL;
     }
-#endif
+
+    rc = rclc_add_parameter(server, DEADBEAT_START_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add deadbeat start parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, DEADBEAT_START_PARAM_NAME, (int32_t)(robot_parameters.deadbeat_start * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for deadbeat start");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, DEADBEAT_END_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add deadbeat end parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, DEADBEAT_END_PARAM_NAME, (int32_t)(robot_parameters.deadbeat_end * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for deadbeat end");
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(MROS_LOGGER_TAG, "Added all parameters to parameter server");
 
     return ESP_OK;
@@ -242,43 +257,54 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
-#if YAW_CORRECTION
-    if (strcmp(new_param->name.data, PID_KP_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.pid_kp = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+    if (strcmp(new_param->name.data, MAX_ANG_VEL_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.max_angular_velocity = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
-        if (save_int_to_nvs((int32_t)(robot_parameters.pid_kp * 1000), PID_KP_PARAM_NAME) == ESP_OK) {
-            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Kp changed to %.3f", robot_parameters.pid_kp);
+        if (save_int_to_nvs((int32_t)(robot_parameters.max_angular_velocity * 1000), MAX_ANG_VEL_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for max angular velocity changed to %.3f", robot_parameters.max_angular_velocity);
             return true;
         } else {
-            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save PID Kp to NVS");
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save max angular velocity to NVS");
             return false;
         }
     }
 
-    if (strcmp(new_param->name.data, PID_KI_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.pid_ki = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+    if (strcmp(new_param->name.data, CORR_WEIGHT_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.correction_weight = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
-        if (save_int_to_nvs((int32_t)(robot_parameters.pid_ki * 1000), PID_KI_PARAM_NAME) == ESP_OK) {
-            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Ki changed to %.3f", robot_parameters.pid_ki);
+        if (save_int_to_nvs((int32_t)(robot_parameters.correction_weight * 1000), CORR_WEIGHT_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for correction weight changed to %.3f", robot_parameters.correction_weight);
             return true;
         } else {
-            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save PID Ki to NVS");
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save correction weight to NVS");
             return false;
         }
     }
 
-    if (strcmp(new_param->name.data, PID_KD_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.pid_kd = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+    if (strcmp(new_param->name.data, DEADBEAT_START_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.deadbeat_start = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
-        if (save_int_to_nvs((int32_t)(robot_parameters.pid_kd * 1000), PID_KD_PARAM_NAME) == ESP_OK) {
-            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for PID Kd changed to %.3f", robot_parameters.pid_kd);
+        if (save_int_to_nvs((int32_t)(robot_parameters.deadbeat_start * 1000), DEADBEAT_START_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for deadbeat start changed to %.3f", robot_parameters.deadbeat_start);
             return true;
         } else {
-            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save PID Kd to NVS");
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save deadbeat start to NVS");
             return false;
         }
     }
-#endif
+
+    if (strcmp(new_param->name.data, DEADBEAT_END_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.deadbeat_end = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.deadbeat_end * 1000), DEADBEAT_END_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for deadbeat end changed to %.3f", robot_parameters.deadbeat_end);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save deadbeat end to NVS");
+            return false;
+        }
+    }
+
     ESP_LOGW(MROS_LOGGER_TAG, "Unknown parameter %s", new_param->name.data);
     return false;
 }
@@ -293,5 +319,19 @@ esp_err_t robot_parameters_get(robot_parameters_t *params) {
         return ESP_ERR_INVALID_STATE;
     }
 
+    return ESP_OK;
+}
+
+esp_err_t robot_parameters_get_preconfigured(robot_parameters_t *params) {
+    if (!params) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    params->wheel_radius = ROBOT_WHEEL_RADIUS_MM;
+    params->track_width = ROBOT_TRACK_WIDTH_MM;
+    params->wheel_base = ROBOT_WHEEL_BASE_MM;
+    params->correction_weight = (float)CORR_WEIGHT / 1000.0f;
+    params->max_angular_velocity = (float)MAX_ANG_VEL / 1000.0f;
+    params->deadbeat_start = (float)DEADBEAT_START / 1000.0f;
+    params->deadbeat_end = (float)DEADBEAT_END / 1000.0f;
     return ESP_OK;
 }
