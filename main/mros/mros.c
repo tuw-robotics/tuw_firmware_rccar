@@ -30,12 +30,6 @@
 #include "mros_param.h"
 #include "mros_transport.h"
 #include "utils/timing_utils.h"
-#include "yaw_correction_used.h"
-
-#if YAW_CORRECTION
-#include <rccar_msgs/msg/rccar_corr1_time2.h>
-#include <sensor_msgs/msg/time_reference.h>
-#endif
 
 static rcl_allocator_t s_allocator;
 static rclc_support_t s_support;
@@ -67,21 +61,13 @@ static EventBits_t s_mros_err_bit;
 static mros_cmd_vel_cb_t s_user_cmd_vel_cb;
 static void *s_user_cmd_vel_ctx;
 
-#if YAW_CORRECTION
-static rccar_msgs__msg__RccarCorr1Time2 s_cmd_vel_buffer;
-#else
 static geometry_msgs__msg__TwistStamped s_cmd_vel_buffer;
-#endif
 static QueueHandle_t s_odom_q;
 static QueueHandle_t s_imu_q;
 
 static void internal_cmd_vel_callback(const void *msgin) {
     if (s_user_cmd_vel_cb) {
-#if YAW_CORRECTION
-        s_user_cmd_vel_cb((const rccar_msgs__msg__RccarCorr1Time2 *)msgin, s_user_cmd_vel_ctx);
-#else
         s_user_cmd_vel_cb((const geometry_msgs__msg__TwistStamped *)msgin, s_user_cmd_vel_ctx);
-#endif
     }
 }
 
@@ -363,12 +349,7 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     ESP_LOGI(MROS_LOGGER_TAG, "Robot parameters registered to micro-ROS");
 
     //! When subscribing to a reliable topic that has a high publishing frequency, the acknowledgements might block other things in the executer
-#if YAW_CORRECTION
-    if (rclc_subscription_init_default(&s_cmd_vel_subscriber, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(rccar_msgs, msg, RccarCorr1Time2), MROS_CMD_VEL_TOPIC) != RCL_RET_OK)
-#else
-    if (rclc_subscription_init_default(&s_cmd_vel_subscriber, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, TwistStamped), MROS_CMD_VEL_TOPIC) != RCL_RET_OK)
-#endif
-    {
+    if (rclc_subscription_init_default(&s_cmd_vel_subscriber, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, TwistStamped), MROS_CMD_VEL_TOPIC) != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize cmd_vel subscriber");
         return ESP_FAIL;
     }

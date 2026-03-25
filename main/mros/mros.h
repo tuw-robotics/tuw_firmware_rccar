@@ -15,15 +15,8 @@
 #include "utils/timing_utils.h"
 
 #include "mros_conf.h"
-#include "yaw_correction_used.h"
 
-#if YAW_CORRECTION
-#include <rccar_msgs/msg/rccar_corr1_time2.h>
-#include <sensor_msgs/msg/time_reference.h>
-typedef void (*mros_cmd_vel_cb_t)(const rccar_msgs__msg__RccarCorr1Time2 *msg, void *context);
-#else
 typedef void (*mros_cmd_vel_cb_t)(const geometry_msgs__msg__TwistStamped *msg, void *context);
-#endif
 
 /**
  * @brief Initializes the MROS module

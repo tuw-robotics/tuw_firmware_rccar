@@ -95,7 +95,7 @@ menu "Application-specific settings"
 
         config MROS_CMD_VEL_TOPIC
             string "micro-ROS cmd_vel topic"
-            default "cmd_vel_corr"
+            default "cmd_vel"
 
         config MROS_BASE_FRAME_ID
             string "micro-ROS base frame ID"
@@ -113,11 +113,13 @@ menu "Application-specific settings"
             help
                 Maximum allowed time since last received cmd_vel message before stopping the robot.
 
+        config YAW_CORRECTION_PERIOD_MS
+            int "Period in which the cmd_vel msgs are published (ms)"
+            default 100
+
     endmenu # micro-ROS application
    
     menu "Command tuning settings"
-    depends on YAW_CORRECTION
-
         config MAX_ANG_VEL
             int "Maximum angular velocity (x1000)"
             help 
@@ -222,16 +224,6 @@ menu "Application-specific settings"
         int "JTAG buffer size"
         range 0 1024
         default 1024
-
-    config YAW_CORRECTION
-        bool "Use yaw correction"
-        default y
-
-    config YAW_CORRECTION_PERIOD_MS
-        depends on YAW_CORRECTION
-        int "Period in which the cmd_vel msgs are published (ms)"
-        default 100
-
     
 endmenu # Application-specific settings
     

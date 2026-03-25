@@ -8,11 +8,32 @@
 
 #include <esp_err.h>
 #include <freertos/FreeRTOS.h>
+#include <sdkconfig.h>
 
 #define ROBOT_CONTROLLER_LOGGER_TAG "robot_controller"
 #define ROBOT_CONTROLLER_TASK_NAME "robot_controller_task"
 #define ROBOT_CONTROLLER_STACK_SIZE 4096
 #define ROBOT_CONTROLLER_PRIORITY 5
+
+#ifdef CONFIG_MROS_CMD_VEL_TIMEOUT_MS
+#define MROS_CMD_VEL_TIMEOUT_MS CONFIG_MROS_CMD_VEL_TIMEOUT_MS
+#else
+#define MROS_CMD_VEL_TIMEOUT_MS 200
+#endif
+
+#ifdef CONFIG_YAW_CORRECTION_PERIOD
+#define YAW_CORRECTION_PERIOD_MS CONFIG_YAW_CORRECTION_PERIOD_MS
+#else
+#define YAW_CORRECTION_PERIOD_MS 100
+#endif
+
+typedef struct {
+    wallclock_timestamp_t timestamp;
+    float linear_vel;
+    float angular_vel;
+    float angle;
+    bool correction_active;
+} cmd_t;
 
 /**
  * @brief Initializes the robot controller module

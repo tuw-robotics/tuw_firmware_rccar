@@ -17,22 +17,12 @@
 #include <sdkconfig.h>
 #include <sys/time.h>
 
-#include "yaw_correction_used.h"
-
-#if YAW_CORRECTION
-#include <rccar_msgs/msg/rccar_corr1_time2.h>
-#endif
-
-#ifdef CONFIG_MROS_CMD_VEL_TIMEOUT_MS
-#define MROS_CMD_VEL_TIMEOUT_MS CONFIG_MROS_CMD_VEL_TIMEOUT_MS
-#else
-#define MROS_CMD_VEL_TIMEOUT_MS 200
-#endif
+static const cmd_t cmd_t_zero = {.timestamp.tv_sec = 0, .timestamp.tv_usec = 0, .linear_vel = 0, .angular_vel = 0, .angle = 0, .correction_active = false};
 
 static odrive_context_t *s_odrive_ml_context;
 static odrive_context_t *s_odrive_mr_context;
 static servo_t *s_servo_context;
-static QueueHandle_t s_cmd_vel_q;
+static QueueHandle_t s_cmd_q;
 
 static TaskHandle_t s_base_control_task_h;
 
@@ -47,19 +37,16 @@ static void base_control_task(void *pv) {
     ESP_UNUSED(pv);
     ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "Base control task started");
 
-#if YAW_CORRECTION
-    rccar_msgs__msg__RccarCorr1Time2 cmd_vel_local;
+    cmd_t cmd_local;
     sensor_msgs__msg__Imu imu_local;
     float yaw_err, current_yaw, remaining_us, yaw_rate_needed;
     robot_parameters_t params_local;
-    float yaw_rate_cmd, user_suppress, k;
+    float user_suppress, k;
     float correction_on = 0.0f;
-#else
-    geometry_msgs__msg__TwistStamped cmd_vel_local;
-#endif
-    builtin_interfaces__msg__Time time_current;
-    builtin_interfaces__msg__Time time_last_cmd_delta;
-    float last_time_cmd_delta_us;
+
+    wallclock_timestamp_t time_current;
+    wallclock_timestamp_t time_last_cmd_delta;
+    long long last_time_cmd_delta_us;
 
     float torque_ff_ml = 0.0f;
     float torque_ff_mr = 0.0f;
@@ -68,8 +55,8 @@ static void base_control_task(void *pv) {
 
     EventBits_t bits = xEventGroupWaitBits(s_base_control_evt_group, BASE_CONTROL_RUN_BIT, pdFALSE, pdTRUE, portMAX_DELAY); // Wait for start signal
 
-    if (xQueuePeek(s_cmd_vel_q, &cmd_vel_local, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get initial cmd_vel message");
+    if (xQueuePeek(s_cmd_q, &cmd_local, portMAX_DELAY) != pdTRUE) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get initial cmd message");
         vTaskDelete(NULL);
     }
 
@@ -79,16 +66,16 @@ static void base_control_task(void *pv) {
             break; // Instead of terminating every time the run bit is unset, we could just set it to a waiting state -> can be restarted again
         }
 
-        if (xQueuePeek(s_cmd_vel_q, &cmd_vel_local, 0) != pdTRUE) {
-            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get cmd_vel message");
+        if (xQueuePeek(s_cmd_q, &cmd_local, 0) != pdTRUE) {
+            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to get cmd message");
             break;
         }
 
-        time_current = time_now();
-        time_last_cmd_delta = time_delta(&cmd_vel_local.header.stamp, &time_current);
-        last_time_cmd_delta_us = (float)time_to_us(&time_last_cmd_delta);
+        gettimeofday(&time_current, NULL);
+        timersub(&time_current, &cmd_local.timestamp, &time_last_cmd_delta);
+        last_time_cmd_delta_us = time_last_cmd_delta.tv_sec * 1000000LL + (long long)time_last_cmd_delta.tv_usec;
         // stop if timeout exceeded
-        if ((float)US_TO_MS(last_time_cmd_delta_us) > (float)MROS_CMD_VEL_TIMEOUT_MS) {
+        if (last_time_cmd_delta_us > (long long)MS_TO_US(MROS_CMD_VEL_TIMEOUT_MS)) {
             if (odrive_set_velocity(s_odrive_ml_context, 0.0f, torque_ff_ml) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
                 break;
@@ -99,21 +86,18 @@ static void base_control_task(void *pv) {
             }
         } else {
             // normal operation
-
-#if YAW_CORRECTION
-            if (cmd_vel_local.yaw_direction >= -M_PI && cmd_vel_local.yaw_direction <= M_PI) { // only valid if in [-pi; pi]
+            if (cmd_local.correction_active == true) {
                 // try to get imu msg -> if fail use cmd_vel.twsit for inverse kinematic
                 if (mros_peek_imu_msg(&imu_local) != ESP_OK) {
                     ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to peek IMU msg.");
-                    ik_input.omega_z = cmd_vel_local.twist.angular.z;
+                    ik_input.omega_z = cmd_local.angular_vel;
                 } else {
                     if (robot_parameters_get(&params_local) != ESP_OK) {
                         robot_parameters_get_preconfigured(&params_local);
                     }
-
                     current_yaw = math_normalize_angle(math_quaternion_to_yaw(imu_local.orientation.x, imu_local.orientation.y, imu_local.orientation.z, imu_local.orientation.w));
-                    yaw_err = math_normalize_angle(cmd_vel_local.yaw_direction - current_yaw);
-                    remaining_us = (float)MAX(MS_TO_US((float)YAW_CORRECTION_PERIOD_MS) - last_time_cmd_delta_us, 20000.0f);
+                    yaw_err = math_normalize_angle(cmd_local.angle - current_yaw);
+                    remaining_us = MAX((float)MS_TO_US(YAW_CORRECTION_PERIOD_MS) - (float)last_time_cmd_delta_us, 20000.0f);
                     yaw_rate_needed = CLAMP((float)((double)yaw_err / (double)US_TO_S(remaining_us)), -2.0f, 2.0f);
                     // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
                     if (correction_on == 1.0f && fabsf(yaw_err) < params_local.deadbeat_end) { // turn off
@@ -122,18 +106,15 @@ static void base_control_task(void *pv) {
                     if (correction_on == 0.0f && fabsf(yaw_err) > params_local.deadbeat_start) { // turn on
                         correction_on = 1.0f;
                     }
-                    user_suppress = CLAMP(1.0f - (fabsf((float)cmd_vel_local.twist.angular.z) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
+                    user_suppress = CLAMP(1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
                     k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
-                    yaw_rate_cmd = CLAMP((float)cmd_vel_local.twist.angular.z + k * (yaw_rate_needed - (float)cmd_vel_local.twist.angular.z), -2.0f, 2.0f); // k * needed + (1 - k) * user
-                    ik_input.omega_z = yaw_rate_cmd;
+                    ik_input.omega_z =
+                        CLAMP((float)cmd_local.angular_vel + k * (yaw_rate_needed - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * needed + (1 - k) * user
                 }
             } else {
-                ik_input.omega_z = cmd_vel_local.twist.angular.z;
+                ik_input.omega_z = cmd_local.angular_vel;
             }
-#else
-            ik_input.omega_z = cmd_vel_local.twist.angular.z;
-#endif
-            ik_input.vel_x = cmd_vel_local.twist.linear.x;
+            ik_input.vel_x = cmd_local.linear_vel;
 
             if (inverse_kinematics(&ik_input, &ik_output) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate inverse kinematics");
@@ -181,26 +162,38 @@ static void base_control_task(void *pv) {
 
 // mros_cmd_vel_cb_t signature
 //! This is executed within the mros executor task
-#if YAW_CORRECTION
-void on_cmd_vel_callback(const rccar_msgs__msg__RccarCorr1Time2 *msg, void *context)
-#else
-void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *context)
-#endif
-{
+void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *context) {
     ESP_UNUSED(context);
 
+    cmd_t old_cmd;
+    cmd_t new_cmd = cmd_t_zero;
+    sensor_msgs__msg__Imu imu_msg;
     // use local time as the timesyncronisation sometimes is of for some ms and we may want tight timeout for the internal control task
-#if YAW_CORRECTION
-    rccar_msgs__msg__RccarCorr1Time2 msg_local = *msg;
-#else
-    geometry_msgs__msg__TwistStamped msg_local = *msg;
-#endif
+    gettimeofday(&new_cmd.timestamp, NULL);
 
-    builtin_interfaces__msg__Time current_time = time_now();
+    if (xQueuePeek(s_cmd_q, &old_cmd, 0) != pdTRUE) {
+        old_cmd = cmd_t_zero;
+    }
 
-    msg_local.header.stamp = current_time;
-    if (xQueueOverwrite(s_cmd_vel_q, &msg_local) != pdTRUE) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to overwrite cmd_vel queue");
+    new_cmd.correction_active = (msg->twist.linear.x > 0) ? true : false;
+
+    if (old_cmd.correction_active == false) {
+        if (mros_peek_imu_msg(&imu_msg) != ESP_OK) {
+            new_cmd.correction_active = false;
+            ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to peek IMU msg for initial yaw calculation.");
+        }
+        old_cmd.angle = math_normalize_angle(math_quaternion_to_yaw(imu_msg.orientation.x, imu_msg.orientation.y, imu_msg.orientation.z, imu_msg.orientation.w));
+    }
+
+    if (new_cmd.correction_active == true) {
+        new_cmd.angle = math_normalize_angle(old_cmd.angle + msg->twist.angular.z * (float)YAW_CORRECTION_PERIOD_MS / 1000.0f);
+    }
+
+    new_cmd.linear_vel = msg->twist.linear.x;
+    new_cmd.angular_vel = msg->twist.angular.z;
+
+    if (xQueueOverwrite(s_cmd_q, &new_cmd) != pdTRUE) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to overwrite cmd queue");
         return;
     }
 }
@@ -236,16 +229,12 @@ esp_err_t robot_controller_init(odrive_context_t *odrive_ml_context, odrive_cont
     }
     s_servo_context = servo_context;
 
-#if YAW_CORRECTION
-    s_cmd_vel_q = xQueueCreate(1, sizeof(rccar_msgs__msg__RccarCorr1Time2));
-#else
-    s_cmd_vel_q = xQueueCreate(1, sizeof(geometry_msgs__msg__TwistStamped));
-#endif
-    if (s_cmd_vel_q == NULL) {
-        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to create cmd_vel queue");
+    s_cmd_q = xQueueCreate(1, sizeof(cmd_t));
+    if (s_cmd_q == NULL) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to create cmd queue");
         return ESP_FAIL;
     }
-    ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "cmd_vel queue created");
+    ESP_LOGI(ROBOT_CONTROLLER_LOGGER_TAG, "cmd queue created");
 
     if (!error_handle) {
         ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Invalid error handle");
@@ -338,9 +327,9 @@ esp_err_t robot_controller_deinit(TickType_t wait_ticks) {
         s_servo_context = NULL;
     }
 
-    if (s_cmd_vel_q) {
-        vQueueDelete(s_cmd_vel_q);
-        s_cmd_vel_q = NULL;
+    if (s_cmd_q) {
+        vQueueDelete(s_cmd_q);
+        s_cmd_q = NULL;
     }
 
     s_base_control_err_evt_group = NULL;
