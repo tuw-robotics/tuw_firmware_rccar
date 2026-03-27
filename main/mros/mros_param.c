@@ -125,6 +125,15 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default deadbeat_end = %.3f", robot_parameters.deadbeat_end);
     }
 
+    int32_t kp;
+    if (load_int_from_nvs(&kp, KP_PARAM_NAME) == ESP_OK) {
+        robot_parameters.kp = (float)kp / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded kp = %.3f from NVS", robot_parameters.kp);
+    } else {
+        robot_parameters.kp = (float)KP / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default kp = %.3f", robot_parameters.kp);
+    }
+
     xQueueOverwrite(robot_params_queue, &robot_parameters);
 
     return ESP_OK;
@@ -207,6 +216,17 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     rc = rclc_parameter_set_int(server, DEADBEAT_END_PARAM_NAME, (int32_t)(robot_parameters.deadbeat_end * 1000)); // Convert to int
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for deadbeat end");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, KP_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add kp parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, KP_PARAM_NAME, (int32_t)(robot_parameters.kp * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for kp");
         return ESP_FAIL;
     }
 
@@ -333,5 +353,6 @@ esp_err_t robot_parameters_get_preconfigured(robot_parameters_t *params) {
     params->max_angular_velocity = (float)MAX_ANG_VEL / 1000.0f;
     params->deadbeat_start = (float)DEADBEAT_START / 1000.0f;
     params->deadbeat_end = (float)DEADBEAT_END / 1000.0f;
+    params->kp = (float)KP / 1000.0f;
     return ESP_OK;
 }

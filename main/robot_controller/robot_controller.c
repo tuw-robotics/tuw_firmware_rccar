@@ -39,7 +39,7 @@ static void base_control_task(void *pv) {
 
     cmd_t cmd_local;
     sensor_msgs__msg__Imu imu_local;
-    float yaw_err, current_yaw, remaining_us, yaw_rate_needed;
+    float yaw_err, current_yaw, yaw_controller;
     robot_parameters_t params_local;
     float user_suppress, k;
     float correction_on = 0.0f;
@@ -97,8 +97,7 @@ static void base_control_task(void *pv) {
                     }
                     current_yaw = math_normalize_angle(math_quaternion_to_yaw(imu_local.orientation.x, imu_local.orientation.y, imu_local.orientation.z, imu_local.orientation.w));
                     yaw_err = math_normalize_angle(cmd_local.angle - current_yaw);
-                    remaining_us = MAX((float)MS_TO_US(YAW_CORRECTION_PERIOD_MS) - (float)last_time_cmd_delta_us, 20000.0f);
-                    yaw_rate_needed = CLAMP((float)((double)yaw_err / (double)US_TO_S(remaining_us)), -2.0f, 2.0f);
+                    yaw_controller = CLAMP(params_local.kp * yaw_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);
                     // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
                     if (correction_on == 1.0f && fabsf(yaw_err) < params_local.deadbeat_end) { // turn off
                         correction_on = 0.0f;
@@ -109,7 +108,7 @@ static void base_control_task(void *pv) {
                     user_suppress = CLAMP(1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
                     k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
                     ik_input.omega_z =
-                        CLAMP((float)cmd_local.angular_vel + k * (yaw_rate_needed - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * needed + (1 - k) * user
+                        CLAMP((float)cmd_local.angular_vel + k * (yaw_controller - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * cntroller + (1 - k) * user
                 }
             } else {
                 ik_input.omega_z = cmd_local.angular_vel;

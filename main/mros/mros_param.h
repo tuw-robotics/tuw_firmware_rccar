@@ -71,6 +71,13 @@
 #endif
 #define DEADBEAT_END_PARAM_NAME "deadbeat_end"
 
+#ifdef CONFIG_KP
+#define KP CONFIG_KP
+#else
+#define KP 2000
+#endif
+#define KP_PARAM_NAME "kp"
+
 // Check if names are too long
 _Static_assert(sizeof(ROBOT_WHEEL_RADIUS_PARAM_NAME) <= 15, "ROBOT_WHEEL_RADIUS_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(ROBOT_TRACK_WIDTH_PARAM_NAME) <= 15, "ROBOT_TRACK_WIDTH_PARAM_NAME must not exceed 15 characters");
@@ -79,6 +86,7 @@ _Static_assert(sizeof(MAX_ANG_VEL_PARAM_NAME) <= 15, "MAX_ANG_VEL_PARAM_NAME mus
 _Static_assert(sizeof(CORR_WEIGHT_PARAM_NAME) <= 15, "CORR_WEIGHT_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(DEADBEAT_START_PARAM_NAME) <= 15, "DEADBEAT_START_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(DEADBEAT_END_PARAM_NAME) <= 15, "DEADBEAT_END_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(KP_PARAM_NAME) <= 15, "KP_PARAM_NAME must not exceed 15 characters");
 
 typedef struct {
     int32_t track_width;
@@ -88,6 +96,7 @@ typedef struct {
     float correction_weight;
     float deadbeat_start;
     float deadbeat_end;
+    float kp;
 } robot_parameters_t;
 
 /**

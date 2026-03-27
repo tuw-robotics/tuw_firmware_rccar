@@ -144,6 +144,12 @@ menu "Application-specific settings"
                 Ending point for deadbeat control, multiplied by 1000 to allow for fractional values.
             default 26
 
+        config KP
+            int "Proportional gain (x1000)"
+            help
+                Proportional gain for the P controller, multiplied by 1000 to allow for fractional values.
+            default 2000
+
     endmenu # PID controller settings
     
     menu "Robot kinematics"
