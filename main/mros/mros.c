@@ -25,11 +25,15 @@
 #include <geometry_msgs/msg/twist_stamped.h>
 #include <nav_msgs/msg/odometry.h>
 #include <sensor_msgs/msg/imu.h>
+#include <std_msgs/msg/detail/multi_array_dimension__functions.h>
+#include <std_msgs/msg/float64_multi_array.h>
 #include <uros_network_interfaces.h>
 
 #include "mros_param.h"
 #include "mros_transport.h"
 #include "utils/timing_utils.h"
+
+#include "controller_data/controller_data_config.h"
 
 static rcl_allocator_t s_allocator;
 static rclc_support_t s_support;
@@ -39,6 +43,10 @@ static rcl_timer_t s_odom_timer;
 static rcl_publisher_t s_odom_publisher;
 static rcl_timer_t s_imu_timer;
 static rcl_publisher_t s_imu_publisher;
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+static rcl_timer_t s_controller_data_timer;
+static rcl_publisher_t s_controller_data_publisher;
+#endif
 static rcl_subscription_t s_cmd_vel_subscriber;
 static rclc_parameter_server_t s_param_server;
 
@@ -56,7 +64,11 @@ static EventGroupHandle_t s_mros_evt_group;
 static EventGroupHandle_t s_mros_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_mros_err_bit;
 
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 0
 #define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 2 + 1 // PARAM HANDLES + 2 for timer + 1 for subscription
+#else
+#define EXECUTOR_HANDLES RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 2 + 1 + 1 // +1 for controller data timer
+#endif
 
 static mros_cmd_vel_cb_t s_user_cmd_vel_cb;
 static void *s_user_cmd_vel_ctx;
@@ -64,6 +76,9 @@ static void *s_user_cmd_vel_ctx;
 static geometry_msgs__msg__TwistStamped s_cmd_vel_buffer;
 static QueueHandle_t s_odom_q;
 static QueueHandle_t s_imu_q;
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+static QueueHandle_t s_controller_data_q;
+#endif
 
 static void internal_cmd_vel_callback(const void *msgin) {
     if (s_user_cmd_vel_cb) {
@@ -102,6 +117,23 @@ static void imu_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
         return;
     }
 }
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+static void controller_data_timer_callback(rcl_timer_t *timer, int64_t last_call_time) {
+    ESP_UNUSED(timer);
+    ESP_UNUSED(last_call_time);
+    std_msgs__msg__Float64MultiArray controller_data_msg;
+    if (xQueuePeek(s_controller_data_q, &controller_data_msg, 0) != pdTRUE) {
+        ESP_LOGW(MROS_LOGGER_TAG, "No controller data available in the queue");
+        return;
+    }
+
+    if (rcl_publish(&s_controller_data_publisher, &controller_data_msg, NULL) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to publish controller data");
+        return;
+    }
+}
+#endif
 
 static bool on_parameter_changed_callback(const rcl_interfaces__msg__Parameter *old_param, const rcl_interfaces__msg__Parameter *new_param, void *context) {
     ESP_UNUSED(old_param);
@@ -281,6 +313,15 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
     }
     ESP_LOGI(MROS_LOGGER_TAG, "IMU queue created");
 
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    s_controller_data_q = xQueueCreate(1, sizeof(std_msgs__msg__Float64MultiArray));
+    if (s_controller_data_q == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to create controller data queue");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Controller data queue created");
+#endif
+
     if (rmw_uros_ping_agent(1000, 5) != RMW_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "micro-ROS agent NOT reachable");
         return ESP_FAIL;
@@ -326,6 +367,20 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
         return ESP_FAIL;
     }
     ESP_LOGI(MROS_LOGGER_TAG, "IMU timer initialized");
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    if (rclc_publisher_init_best_effort(&s_controller_data_publisher, &s_node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), CONTROLLER_DATA_TOPIC) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize controller data publisher");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Controller data publisher initialized");
+
+    if (rclc_timer_init_default2(&s_controller_data_timer, &s_support, RCL_MS_TO_NS(CONTROLLER_DATA_PUBLISHER_PERIOD_MS), controller_data_timer_callback, true) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize controller data timer");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Controller data timer initialized");
+#endif
 
     // used same options as rclc_parameter_server_init_default but with bigger max_params
     rclc_parameter_options_t param_options = {.notify_changed_over_dds = true, .max_params = 8, .allow_undeclared_parameters = false, .low_mem_mode = false};
@@ -385,6 +440,14 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
         return ESP_FAIL;
     }
     ESP_LOGI(MROS_LOGGER_TAG, "IMU timer added to executor");
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    if (rclc_executor_add_timer(&s_executor, &s_controller_data_timer) != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add controller data timer to executor");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(MROS_LOGGER_TAG, "Controller data timer added to executor");
+#endif
 
     s_mros_evt_group = xEventGroupCreate();
     if (!s_mros_evt_group) {
@@ -463,6 +526,11 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
     if (rcl_publisher_fini(&s_imu_publisher, &s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU publisher");
     }
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    if (rcl_publisher_fini(&s_controller_data_publisher, &s_node) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize controller data publisher");
+    }
+#endif
     if (rcl_subscription_fini(&s_cmd_vel_subscriber, &s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize cmd_vel subscriber");
     }
@@ -472,6 +540,11 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
     if (rcl_timer_fini(&s_imu_timer) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize IMU timer");
     }
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    if (rcl_timer_fini(&s_controller_data_timer) != RCL_RET_OK) {
+        ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize controller data timer");
+    }
+#endif
     if (rcl_node_fini(&s_node) != RCL_RET_OK) {
         ESP_LOGW(MROS_LOGGER_TAG, "Failed to finalize node");
     }
@@ -492,6 +565,13 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
         s_imu_q = NULL;
     }
 
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    if (s_controller_data_q) {
+        vQueueDelete(s_controller_data_q);
+        s_controller_data_q = NULL;
+    }
+#endif
+
     if (s_mros_exec_task_h) {
         vTaskDelete(s_mros_exec_task_h);
         s_mros_exec_task_h = NULL;
@@ -504,6 +584,9 @@ esp_err_t mros_module_deinit(TickType_t wait_ticks) {
 
     s_odom_q = NULL;
     s_imu_q = NULL;
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    s_controller_data_q = NULL;
+#endif
     s_mros_exec_task_h = NULL;
     s_mros_sync_task_h = NULL;
     s_user_cmd_vel_cb = NULL;
@@ -607,6 +690,58 @@ esp_err_t mros_peek_imu_msg(sensor_msgs__msg__Imu *imu_msg) {
     }
     return ESP_OK;
 }
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+esp_err_t mros_update_controller_data(std_msgs__msg__Float64MultiArray *controller_data_msg) {
+    if (xQueueOverwrite(s_controller_data_q, controller_data_msg) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to overwrite controller data queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mros_init_controller_data_msg(std_msgs__msg__Float64MultiArray *controller_data_msg) {
+    if (controller_data_msg == NULL) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Invalid argument to init_controller_data_msg");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(controller_data_msg, 0, sizeof(std_msgs__msg__Float64MultiArray));
+
+    if (!rosidl_runtime_c__double__Sequence__init(&controller_data_msg->data, CONTROLLER_DATA_SIZE * 4)) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to init data");
+        return ESP_FAIL;
+    }
+
+    if (!std_msgs__msg__MultiArrayDimension__Sequence__init(&controller_data_msg->layout.dim, 2)) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to init layout.dim");
+        return ESP_FAIL;
+    }
+
+    for (int i = 0; i < CONTROLLER_DATA_SIZE * 4; i++) {
+        controller_data_msg->data.data[i] = -1.0;
+    }
+
+    controller_data_msg->layout.data_offset = 0;
+
+    rosidl_runtime_c__String__assign(&controller_data_msg->layout.dim.data[0].label, "index");
+    controller_data_msg->layout.dim.data[0].size = CONTROLLER_DATA_SIZE;
+    controller_data_msg->layout.dim.data[0].stride = CONTROLLER_DATA_SIZE * 4;
+    rosidl_runtime_c__String__assign(&controller_data_msg->layout.dim.data[1].label, "[t, r, y, u]");
+    controller_data_msg->layout.dim.data[1].size = 4;
+    controller_data_msg->layout.dim.data[1].stride = 4;
+
+    return ESP_OK;
+}
+
+esp_err_t mros_peek_controller_data_msg(std_msgs__msg__Float64MultiArray *controller_data_msg) {
+    if (xQueuePeek(s_controller_data_q, controller_data_msg, 0) != pdTRUE) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to peek controller data queue");
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+#endif
 
 bool mros_is_agent_connected(void) { return xEventGroupGetBits(s_mros_evt_group) & MROS_AGENT_CONNECTED; }
 

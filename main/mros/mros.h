@@ -10,8 +10,10 @@
 #include <rclc/executor.h>
 #include <sdkconfig.h>
 #include <sensor_msgs/msg/imu.h>
+#include <std_msgs/msg/float64_multi_array.h>
 #include <stdbool.h>
 
+#include "controller_data/controller_data_config.h"
 #include "utils/timing_utils.h"
 
 #include "mros_conf.h"
@@ -120,5 +122,15 @@ bool mros_is_agent_connected(void);
  * @return true if the time is synchronized, false otherwise
  */
 bool mros_is_time_synced(void);
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+
+esp_err_t mros_init_controller_data_msg(std_msgs__msg__Float64MultiArray *controller_data_msg);
+
+esp_err_t mros_update_controller_data(std_msgs__msg__Float64MultiArray *controller_data_msg);
+
+esp_err_t mros_peek_controller_data_msg(std_msgs__msg__Float64MultiArray *controller_data_msg);
+
+#endif
 
 #endif // MROS_INTERFACE_H

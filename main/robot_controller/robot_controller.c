@@ -1,5 +1,6 @@
 #include "robot_controller.h"
 
+#include "controller_data/controller_data_config.h"
 #include "kinematics/kinematics.h"
 #include "mros/mros.h"
 #include "mros/mros_param.h"
@@ -15,6 +16,7 @@
 #include <math.h>
 #include <nav_msgs/msg/odometry.h>
 #include <sdkconfig.h>
+#include <std_msgs/msg/float64_multi_array.h>
 #include <sys/time.h>
 
 static const cmd_t cmd_t_zero = {.timestamp.tv_sec = 0, .timestamp.tv_usec = 0, .linear_vel = 0, .angular_vel = 0, .angle = 0, .correction_active = false};
@@ -32,6 +34,18 @@ static EventGroupHandle_t s_base_control_evt_group;
 
 static EventGroupHandle_t s_base_control_err_evt_group; // This is for external systems to be able to react to an error
 static EventBits_t s_base_control_err_bit;
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+static void new_controller_data(std_msgs__msg__Float64MultiArray *controller_data_msg, wallclock_timestamp_t *timestamp, const double r, const double y, const double u) {
+    for (int i = CONTROLLER_DATA_SIZE * 4 - 1; i >= 4; i--) {
+        controller_data_msg->data.data[i] = controller_data_msg->data.data[i - 4];
+    }
+    controller_data_msg->data.data[0] = (double)timestamp->tv_sec + (double)timestamp->tv_usec / 1000000.0;
+    controller_data_msg->data.data[1] = r;
+    controller_data_msg->data.data[2] = y;
+    controller_data_msg->data.data[3] = u;
+}
+#endif
 
 static void base_control_task(void *pv) {
     ESP_UNUSED(pv);
@@ -52,6 +66,14 @@ static void base_control_task(void *pv) {
     float torque_ff_mr = 0.0f;
     inverse_kinematics_input_t ik_input;
     inverse_kinematics_output_t ik_output;
+
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+    std_msgs__msg__Float64MultiArray controller_data_msg;
+    if (mros_init_controller_data_msg(&controller_data_msg) != ESP_OK) {
+        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to initialize controller data message");
+        vTaskDelete(NULL);
+    }
+#endif
 
     EventBits_t bits = xEventGroupWaitBits(s_base_control_evt_group, BASE_CONTROL_RUN_BIT, pdFALSE, pdTRUE, portMAX_DELAY); // Wait for start signal
 
@@ -109,11 +131,19 @@ static void base_control_task(void *pv) {
                     k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
                     ik_input.omega_z =
                         CLAMP((float)cmd_local.angular_vel + k * (yaw_controller - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * cntroller + (1 - k) * user
+#if ENABLE_CONTROLLER_DATA_PUBLISH == 1
+                    new_controller_data(&controller_data_msg, &time_current, cmd_local.angle, current_yaw, ik_input.omega_z);
+                    if (mros_update_controller_data(&controller_data_msg) != ESP_OK) {
+                        ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to update IMU data");
+                    }
+#endif
                 }
             } else {
                 ik_input.omega_z = cmd_local.angular_vel;
             }
             ik_input.vel_x = cmd_local.linear_vel;
+
+            // ik_input.omega_z = ik_input.omega_z + 0.5f; // some error for testing
 
             if (inverse_kinematics(&ik_input, &ik_output) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate inverse kinematics");
@@ -185,6 +215,14 @@ void on_cmd_vel_callback(const geometry_msgs__msg__TwistStamped *msg, void *cont
     }
 
     if (new_cmd.correction_active == true) {
+        // recalculate old angle only if for the old one it also was calculated, else we already use the current position as old angle
+        if (old_cmd.correction_active == true) {
+            wallclock_timestamp_t delta_timestamp;
+            timersub(&new_cmd.timestamp, &old_cmd.timestamp, &delta_timestamp);
+            // revert the prediction üto get starting angle from old command
+            float starting_angle = math_normalize_angle(old_cmd.angle - old_cmd.angular_vel * (float)YAW_CORRECTION_PERIOD_MS / 1000.0f);
+            old_cmd.angle = math_normalize_angle(starting_angle + old_cmd.angular_vel * ((float)delta_timestamp.tv_sec + (float)delta_timestamp.tv_usec / 1000000.0f));
+        }
         new_cmd.angle = math_normalize_angle(old_cmd.angle + msg->twist.angular.z * (float)YAW_CORRECTION_PERIOD_MS / 1000.0f);
     }
 

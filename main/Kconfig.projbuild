@@ -117,6 +117,33 @@ menu "Application-specific settings"
             int "Period in which the cmd_vel msgs are published (ms)"
             default 100
 
+        config MROS_ENABLE_CONTROLLER_DATA_PUBLISH
+            bool "Enable controller data publishing"
+            default y
+            help
+                If enabled, publishes additional data from the controller such as setpoint, meassurement and control signal for each controll step in an array.
+
+        menu "Controller data publishing settings"
+        depends on MROS_ENABLE_CONTROLLER_DATA_PUBLISH
+
+            config MROS_CONTROLLER_DATA_TOPIC
+                string "micro-ROS controller data topic"
+                default "ctrl_data"
+
+            config MROS_CONTROLLER_DATA_PUBLISHER_PERIOD_MS
+                int "Controller data publisher period (ms)"
+                default 100
+                help
+                    Rate at which controller data messages are published.
+
+            config MROS_CONTROLLER_DATA_SIZE
+                int "Controller data array size"
+                default 7
+                help
+                    Number of recent control steps to include in the published controller data array. The array will be 4 times this size as it includes [timestamp_t, r_t, y_t, u_t, timestamp_t-1, r_t-1, y_t-1, u_t-1, ...].
+
+        endmenu # Controler data publishing settings
+
     endmenu # micro-ROS application
    
     menu "Command tuning settings"

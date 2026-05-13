@@ -33,5 +33,6 @@
     },
     "C_Cpp.formatting": "clangFormat",
     "editor.formatOnSave": true,
-    "idf.port": "/dev/ttyACM0"
+    "idf.port": "/dev/ttyACM0",
+    "idf.currentSetup": "/opt/esp/idf"
 }
