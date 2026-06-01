@@ -146,36 +146,54 @@ menu "Application-specific settings"
 
     endmenu # micro-ROS application
    
-    menu "Command tuning settings"
+    menu "Yaw Controller settings"
         config MAX_ANG_VEL
-            int "Maximum angular velocity (x1000)"
+            int "Maximum angular velocity (*1000)"
             help 
                 Maximum angular velocity for yaw correction, multiplied by 1000 to allow for fractional values.
             default 2000
 
         config CORR_WEIGHT
-            int "Correction weight (x1000)"
+            int "Correction weight (*1000)"
             help
                 Weight for the yaw correction, multiplied by 1000 to allow for fractional values.
             default 0
 
         config DB_START
-            int "Deadbeat start (x1000)"
+            int "Deadbeat start (*1000)"
             help
                 Starting point for deadbeat control, multiplied by 1000 to allow for fractional values.
             default 35
 
         config DB_END
-            int "Deadbeat end (x1000)"
+            int "Deadbeat end (*1000)"
             help
                 Ending point for deadbeat control, multiplied by 1000 to allow for fractional values.
             default 26
 
         config KP
-            int "Proportional gain (x1000)"
+            int "Proportional gain (*1000)"
             help
                 Proportional gain for the P controller, multiplied by 1000 to allow for fractional values.
             default 2000
+
+        config PT2_D
+            int "D (*1000)"
+            help
+                D value of the PT2 controller, multiplied by 1000 to allow for fractional values.
+            default 800
+
+        config PT2_W
+            int "w (*1000)"
+            help
+                w value of the PT2 controller, multiplied by 1000 to allow for fractional values.
+            default 2000
+
+        config PT2_ENABLE
+            bool "Enable PT2"
+            help
+                Use the PT2 controller instead of the P controller.
+            default y
 
     endmenu # PID controller settings
     

@@ -134,6 +134,33 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default kp = %.3f", robot_parameters.kp);
     }
 
+    int32_t pt2_D;
+    if (load_int_from_nvs(&pt2_D, PT2_D_PARAM_NAME) == ESP_OK) {
+        robot_parameters.pt2_D = (float)pt2_D / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pt2_D = %.3f from NVS", robot_parameters.pt2_D);
+    } else {
+        robot_parameters.pt2_D = (float)PT2_D / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default pt2_D = %.3f", robot_parameters.pt2_D);
+    }
+
+    int32_t pt2_w;
+    if (load_int_from_nvs(&pt2_w, PT2_W_PARAM_NAME) == ESP_OK) {
+        robot_parameters.pt2_w = (float)pt2_w / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pt2_w = %.3f from NVS", robot_parameters.pt2_w);
+    } else {
+        robot_parameters.pt2_w = (float)PT2_W / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default pt2_w = %.3f", robot_parameters.pt2_w);
+    }
+
+    int32_t pt2_enable;
+    if (load_int_from_nvs(&pt2_enable, PT2_W_PARAM_NAME) == ESP_OK) {
+        robot_parameters.pt2_enable = (pt2_enable == 1) ? true : false; // Convert back to bool
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded pt2_enable = %i from NVS", robot_parameters.pt2_enable);
+    } else {
+        robot_parameters.pt2_enable = (PT2_ENABLE == 1) ? true : false; // Convert back to bool
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default pt2_enable = %i", robot_parameters.pt2_enable);
+    }
+
     xQueueOverwrite(robot_params_queue, &robot_parameters);
 
     return ESP_OK;
@@ -227,6 +254,39 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     rc = rclc_parameter_set_int(server, KP_PARAM_NAME, (int32_t)(robot_parameters.kp * 1000)); // Convert to int
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for kp");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, PT2_D_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_D parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, PT2_D_PARAM_NAME, (int32_t)(robot_parameters.pt2_D * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for pt2_D");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, PT2_W_PARAM_NAME, RCLC_PARAMETER_INT);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_w parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, PT2_D_PARAM_NAME, (int32_t)(robot_parameters.pt2_w * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for pt2_w");
+        return ESP_FAIL;
+    }
+
+    rc = rclc_add_parameter(server, PT2_ENABLE_PARAM_NAME, RCLC_PARAMETER_BOOL);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_enable parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, PT2_ENABLE_PARAM_NAME, robot_parameters.pt2_enable); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for pt2_enable");
         return ESP_FAIL;
     }
 
@@ -325,6 +385,54 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    if (strcmp(new_param->name.data, KP_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.kp = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.kp * 1000), KP_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for kp changed to %.3f", robot_parameters.kp);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save kp to NVS");
+            return false;
+        }
+    }
+
+    if (strcmp(new_param->name.data, PT2_D_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.pt2_D = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.pt2_D * 1000), PT2_D_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for pt2_D changed to %.3f", robot_parameters.pt2_D);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save pt2_D to NVS");
+            return false;
+        }
+    }
+
+    if (strcmp(new_param->name.data, PT2_W_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.pt2_w = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.pt2_w * 1000), PT2_W_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for pt2_w changed to %.3f", robot_parameters.pt2_w);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save pt2_w to NVS");
+            return false;
+        }
+    }
+
+    if (strcmp(new_param->name.data, PT2_ENABLE_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_BOOL) {
+        robot_parameters.pt2_enable = new_param->value.bool_value;
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)robot_parameters.pt2_enable, PT2_ENABLE_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for pt2_enable changed to %i", robot_parameters.pt2_enable);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save pt2_enable to NVS");
+            return false;
+        }
+    }
+
     ESP_LOGW(MROS_LOGGER_TAG, "Unknown parameter %s", new_param->name.data);
     return false;
 }
@@ -354,5 +462,8 @@ esp_err_t robot_parameters_get_preconfigured(robot_parameters_t *params) {
     params->deadbeat_start = (float)DEADBEAT_START / 1000.0f;
     params->deadbeat_end = (float)DEADBEAT_END / 1000.0f;
     params->kp = (float)KP / 1000.0f;
+    params->pt2_D = (float)PT2_D / 1000.0f;
+    params->pt2_w = (float)PT2_W / 1000.0f;
+    params->pt2_enable = (PT2_ENABLE == 1) ? true : false;
     return ESP_OK;
 }

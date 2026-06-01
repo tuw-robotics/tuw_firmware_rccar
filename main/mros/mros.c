@@ -383,7 +383,7 @@ esp_err_t mros_module_init(EventGroupHandle_t error_handle, EventBits_t error_bi
 #endif
 
     // used same options as rclc_parameter_server_init_default but with bigger max_params
-    rclc_parameter_options_t param_options = {.notify_changed_over_dds = true, .max_params = 8, .allow_undeclared_parameters = false, .low_mem_mode = false};
+    rclc_parameter_options_t param_options = {.notify_changed_over_dds = true, .max_params = 11, .allow_undeclared_parameters = false, .low_mem_mode = false};
 
     if (rclc_parameter_server_init_with_option(&s_param_server, &s_node, &param_options) != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to initialize parameter server");

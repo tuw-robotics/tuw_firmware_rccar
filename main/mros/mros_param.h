@@ -78,6 +78,27 @@
 #endif
 #define KP_PARAM_NAME "kp"
 
+#ifdef CONFIG_PT2_D
+#define PT2_D CONFIG_PT2_D
+#else
+#define PT2_D 800
+#endif
+#define PT2_D_PARAM_NAME "PT2_D"
+
+#ifdef CONFIG_PT2_W
+#define PT2_W CONFIG_PT2_W
+#else
+#define PT2_W 2000
+#endif
+#define PT2_W_PARAM_NAME "PT2_w"
+
+#ifndef CONFIG_PT2_ENABLE
+#define PT2_ENABLE 0
+#else
+#define PT2_ENABLE CONFIG_PT2_ENABLE
+#endif
+#define PT2_ENABLE_PARAM_NAME "PT2_enable"
+
 // Check if names are too long
 _Static_assert(sizeof(ROBOT_WHEEL_RADIUS_PARAM_NAME) <= 15, "ROBOT_WHEEL_RADIUS_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(ROBOT_TRACK_WIDTH_PARAM_NAME) <= 15, "ROBOT_TRACK_WIDTH_PARAM_NAME must not exceed 15 characters");
@@ -87,6 +108,9 @@ _Static_assert(sizeof(CORR_WEIGHT_PARAM_NAME) <= 15, "CORR_WEIGHT_PARAM_NAME mus
 _Static_assert(sizeof(DEADBEAT_START_PARAM_NAME) <= 15, "DEADBEAT_START_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(DEADBEAT_END_PARAM_NAME) <= 15, "DEADBEAT_END_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(KP_PARAM_NAME) <= 15, "KP_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(PT2_D_PARAM_NAME) <= 15, "PT2_D_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(PT2_W_PARAM_NAME) <= 15, "PT2_W_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(PT2_ENABLE_PARAM_NAME) <= 15, "PT2_ENABLE_PARAM_NAME must not exceed 15 characters");
 
 typedef struct {
     int32_t track_width;
@@ -97,6 +121,9 @@ typedef struct {
     float deadbeat_start;
     float deadbeat_end;
     float kp;
+    float pt2_D;
+    float pt2_w;
+    bool pt2_enable;
 } robot_parameters_t;
 
 /**

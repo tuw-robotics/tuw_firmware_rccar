@@ -53,7 +53,9 @@ static void base_control_task(void *pv) {
 
     cmd_t cmd_local;
     sensor_msgs__msg__Imu imu_local;
-    float yaw_err, current_yaw, yaw_controller;
+    float yaw_err, current_yaw, controller, controller_a, controller_b;
+    float last_controller = 0.0f;
+    float last_err = 0.0f;
     robot_parameters_t params_local;
     float user_suppress, k;
     float correction_on = 0.0f;
@@ -112,6 +114,8 @@ static void base_control_task(void *pv) {
                 // try to get imu msg -> if fail use cmd_vel.twsit for inverse kinematic
                 if (mros_peek_imu_msg(&imu_local) != ESP_OK) {
                     ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to peek IMU msg.");
+                    last_controller = 0.0f;
+                    last_err = 0.0f;
                     ik_input.omega_z = cmd_local.angular_vel;
                 } else {
                     if (robot_parameters_get(&params_local) != ESP_OK) {
@@ -119,7 +123,18 @@ static void base_control_task(void *pv) {
                     }
                     current_yaw = math_normalize_angle(math_quaternion_to_yaw(imu_local.orientation.x, imu_local.orientation.y, imu_local.orientation.z, imu_local.orientation.w));
                     yaw_err = math_normalize_angle(cmd_local.angle - current_yaw);
-                    yaw_controller = CLAMP(params_local.kp * yaw_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);
+
+                    if (params_local.pt2_enable == true) {
+                        controller_a = 1 / 2 * params_local.pt2_w * params_local.pt2_w * 0.02;
+                        controller_b = 2 * params_local.pt2_D * params_local.pt2_w;
+                        controller = CLAMP(last_controller + (controller_a + controller_b) * yaw_err + (controller_a - controller_b) * last_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);
+                    } else {
+                        controller = CLAMP(params_local.kp * yaw_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);
+                    }
+
+                    last_controller = controller;
+                    last_err = yaw_err;
+
                     // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
                     if (correction_on == 1.0f && fabsf(yaw_err) < params_local.deadbeat_end) { // turn off
                         correction_on = 0.0f;
@@ -129,8 +144,9 @@ static void base_control_task(void *pv) {
                     }
                     user_suppress = CLAMP(1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
                     k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
+
                     ik_input.omega_z =
-                        CLAMP((float)cmd_local.angular_vel + k * (yaw_controller - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * cntroller + (1 - k) * user
+                        CLAMP((float)cmd_local.angular_vel + k * (controller - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * cntroller + (1 - k) * user
 #if ENABLE_CONTROLLER_DATA_PUBLISH == 1
                     new_controller_data(&controller_data_msg, &time_current, cmd_local.angle, current_yaw, ik_input.omega_z);
                     if (mros_update_controller_data(&controller_data_msg) != ESP_OK) {
@@ -139,6 +155,8 @@ static void base_control_task(void *pv) {
 #endif
                 }
             } else {
+                last_controller = 0.0f;
+                last_err = 0.0f;
                 ik_input.omega_z = cmd_local.angular_vel;
             }
             ik_input.vel_x = cmd_local.linear_vel;
