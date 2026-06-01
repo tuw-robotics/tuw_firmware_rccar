@@ -135,13 +135,6 @@ static void base_control_task(void *pv) {
                     last_controller = controller;
                     last_err = yaw_err;
 
-                    // do not correct small errors with deadband from 1.5 to 2 grad, <1.5 off >2 on
-                    if (correction_on == 1.0f && fabsf(yaw_err) < params_local.deadbeat_end) { // turn off
-                        correction_on = 0.0f;
-                    }
-                    if (correction_on == 0.0f && fabsf(yaw_err) > params_local.deadbeat_start) { // turn on
-                        correction_on = 1.0f;
-                    }
                     user_suppress = CLAMP(1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
                     k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
 

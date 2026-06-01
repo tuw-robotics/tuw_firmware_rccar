@@ -107,24 +107,6 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default correction_weight = %.3f", robot_parameters.correction_weight);
     }
 
-    int32_t db_start;
-    if (load_int_from_nvs(&db_start, DEADBEAT_START_PARAM_NAME) == ESP_OK) {
-        robot_parameters.deadbeat_start = (float)db_start / 1000.0f; // Convert back to float
-        ESP_LOGI(MROS_LOGGER_TAG, "Loaded deadbeat_start = %.3f from NVS", robot_parameters.deadbeat_start);
-    } else {
-        robot_parameters.deadbeat_start = (float)DEADBEAT_START / 1000.0f; // Convert back to float
-        ESP_LOGW(MROS_LOGGER_TAG, "Using default deadbeat_start = %.3f", robot_parameters.deadbeat_start);
-    }
-
-    int32_t db_end;
-    if (load_int_from_nvs(&db_end, DEADBEAT_END_PARAM_NAME) == ESP_OK) {
-        robot_parameters.deadbeat_end = (float)db_end / 1000.0f; // Convert back to float
-        ESP_LOGI(MROS_LOGGER_TAG, "Loaded deadbeat_end = %.3f from NVS", robot_parameters.deadbeat_end);
-    } else {
-        robot_parameters.deadbeat_end = (float)DEADBEAT_END / 1000.0f; // Convert back to float
-        ESP_LOGW(MROS_LOGGER_TAG, "Using default deadbeat_end = %.3f", robot_parameters.deadbeat_end);
-    }
-
     int32_t kp;
     if (load_int_from_nvs(&kp, KP_PARAM_NAME) == ESP_OK) {
         robot_parameters.kp = (float)kp / 1000.0f; // Convert back to float
@@ -221,28 +203,6 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     rc = rclc_parameter_set_int(server, CORR_WEIGHT_PARAM_NAME, (int32_t)(robot_parameters.correction_weight * 1000)); // Convert to int
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for correction weight");
-        return ESP_FAIL;
-    }
-
-    rc = rclc_add_parameter(server, DEADBEAT_START_PARAM_NAME, RCLC_PARAMETER_INT);
-    if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add deadbeat start parameter");
-        return ESP_FAIL;
-    }
-    rc = rclc_parameter_set_int(server, DEADBEAT_START_PARAM_NAME, (int32_t)(robot_parameters.deadbeat_start * 1000)); // Convert to int
-    if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for deadbeat start");
-        return ESP_FAIL;
-    }
-
-    rc = rclc_add_parameter(server, DEADBEAT_END_PARAM_NAME, RCLC_PARAMETER_INT);
-    if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add deadbeat end parameter");
-        return ESP_FAIL;
-    }
-    rc = rclc_parameter_set_int(server, DEADBEAT_END_PARAM_NAME, (int32_t)(robot_parameters.deadbeat_end * 1000)); // Convert to int
-    if (rc != RCL_RET_OK) {
-        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for deadbeat end");
         return ESP_FAIL;
     }
 
@@ -361,30 +321,6 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
-    if (strcmp(new_param->name.data, DEADBEAT_START_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.deadbeat_start = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
-        xQueueOverwrite(robot_params_queue, &robot_parameters);
-        if (save_int_to_nvs((int32_t)(robot_parameters.deadbeat_start * 1000), DEADBEAT_START_PARAM_NAME) == ESP_OK) {
-            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for deadbeat start changed to %.3f", robot_parameters.deadbeat_start);
-            return true;
-        } else {
-            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save deadbeat start to NVS");
-            return false;
-        }
-    }
-
-    if (strcmp(new_param->name.data, DEADBEAT_END_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
-        robot_parameters.deadbeat_end = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
-        xQueueOverwrite(robot_params_queue, &robot_parameters);
-        if (save_int_to_nvs((int32_t)(robot_parameters.deadbeat_end * 1000), DEADBEAT_END_PARAM_NAME) == ESP_OK) {
-            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for deadbeat end changed to %.3f", robot_parameters.deadbeat_end);
-            return true;
-        } else {
-            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save deadbeat end to NVS");
-            return false;
-        }
-    }
-
     if (strcmp(new_param->name.data, KP_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.kp = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -459,8 +395,6 @@ esp_err_t robot_parameters_get_preconfigured(robot_parameters_t *params) {
     params->wheel_base = ROBOT_WHEEL_BASE_MM;
     params->correction_weight = (float)CORR_WEIGHT / 1000.0f;
     params->max_angular_velocity = (float)MAX_ANG_VEL / 1000.0f;
-    params->deadbeat_start = (float)DEADBEAT_START / 1000.0f;
-    params->deadbeat_end = (float)DEADBEAT_END / 1000.0f;
     params->kp = (float)KP / 1000.0f;
     params->pt2_D = (float)PT2_D / 1000.0f;
     params->pt2_w = (float)PT2_W / 1000.0f;

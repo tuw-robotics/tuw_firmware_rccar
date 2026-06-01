@@ -159,18 +159,6 @@ menu "Application-specific settings"
                 Weight for the yaw correction, multiplied by 1000 to allow for fractional values.
             default 0
 
-        config DB_START
-            int "Deadbeat start (*1000)"
-            help
-                Starting point for deadbeat control, multiplied by 1000 to allow for fractional values.
-            default 35
-
-        config DB_END
-            int "Deadbeat end (*1000)"
-            help
-                Ending point for deadbeat control, multiplied by 1000 to allow for fractional values.
-            default 26
-
         config KP
             int "Proportional gain (*1000)"
             help

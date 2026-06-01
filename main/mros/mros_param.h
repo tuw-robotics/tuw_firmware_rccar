@@ -57,20 +57,6 @@
 #endif
 #define CORR_WEIGHT_PARAM_NAME "corr_weight"
 
-#ifdef CONFIG_DEADBEAT_START
-#define DEADBEAT_START CONFIG_DEADBEAT_START
-#else
-#define DEADBEAT_START 35
-#endif
-#define DEADBEAT_START_PARAM_NAME "deadbeat_start"
-
-#ifdef CONFIG_DEADBEAT_END
-#define DEADBEAT_END CONFIG_DEADBEAT_END
-#else
-#define DEADBEAT_END 26
-#endif
-#define DEADBEAT_END_PARAM_NAME "deadbeat_end"
-
 #ifdef CONFIG_KP
 #define KP CONFIG_KP
 #else
@@ -105,8 +91,6 @@ _Static_assert(sizeof(ROBOT_TRACK_WIDTH_PARAM_NAME) <= 15, "ROBOT_TRACK_WIDTH_PA
 _Static_assert(sizeof(ROBOT_WHEEL_BASE_PARAM_NAME) <= 15, "ROBOT_WHEEL_BASE_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(MAX_ANG_VEL_PARAM_NAME) <= 15, "MAX_ANG_VEL_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(CORR_WEIGHT_PARAM_NAME) <= 15, "CORR_WEIGHT_PARAM_NAME must not exceed 15 characters");
-_Static_assert(sizeof(DEADBEAT_START_PARAM_NAME) <= 15, "DEADBEAT_START_PARAM_NAME must not exceed 15 characters");
-_Static_assert(sizeof(DEADBEAT_END_PARAM_NAME) <= 15, "DEADBEAT_END_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(KP_PARAM_NAME) <= 15, "KP_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(PT2_D_PARAM_NAME) <= 15, "PT2_D_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(PT2_W_PARAM_NAME) <= 15, "PT2_W_PARAM_NAME must not exceed 15 characters");
@@ -118,8 +102,6 @@ typedef struct {
     int32_t wheel_base;
     float max_angular_velocity;
     float correction_weight;
-    float deadbeat_start;
-    float deadbeat_end;
     float kp;
     float pt2_D;
     float pt2_w;
