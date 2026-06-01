@@ -135,7 +135,9 @@ static void base_control_task(void *pv) {
                     last_controller = controller;
                     last_err = yaw_err;
 
-                    user_suppress = CLAMP(1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity), 0.0f, 1.0f); // suppress correction when user is turning
+                    user_suppress = CLAMP(params_local.max_corner_suppress * (1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity)),
+                                          0.0f,
+                                          params_local.max_corner_suppress); // suppress correction when user is turning
                     k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
 
                     ik_input.omega_z =

@@ -89,6 +89,7 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default wheel_base = %ld mm", robot_parameters.wheel_base);
     }
 
+    // max angular velocity
     int32_t max_ang_vel;
     if (load_int_from_nvs(&max_ang_vel, MAX_ANG_VEL_PARAM_NAME) == ESP_OK) {
         robot_parameters.max_angular_velocity = (float)max_ang_vel / 1000.0f; // Convert back to float
@@ -98,6 +99,7 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default max_angular_velocity = %.3f", robot_parameters.max_angular_velocity);
     }
 
+    // correction weight
     int32_t corr_weight;
     if (load_int_from_nvs(&corr_weight, CORR_WEIGHT_PARAM_NAME) == ESP_OK) {
         robot_parameters.correction_weight = (float)corr_weight / 1000.0f; // Convert back to float
@@ -107,6 +109,7 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default correction_weight = %.3f", robot_parameters.correction_weight);
     }
 
+    // kp
     int32_t kp;
     if (load_int_from_nvs(&kp, KP_PARAM_NAME) == ESP_OK) {
         robot_parameters.kp = (float)kp / 1000.0f; // Convert back to float
@@ -116,6 +119,7 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default kp = %.3f", robot_parameters.kp);
     }
 
+    // D
     int32_t pt2_D;
     if (load_int_from_nvs(&pt2_D, PT2_D_PARAM_NAME) == ESP_OK) {
         robot_parameters.pt2_D = (float)pt2_D / 1000.0f; // Convert back to float
@@ -125,6 +129,7 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default pt2_D = %.3f", robot_parameters.pt2_D);
     }
 
+    // w
     int32_t pt2_w;
     if (load_int_from_nvs(&pt2_w, PT2_W_PARAM_NAME) == ESP_OK) {
         robot_parameters.pt2_w = (float)pt2_w / 1000.0f; // Convert back to float
@@ -134,6 +139,7 @@ esp_err_t robot_parameters_init(void) {
         ESP_LOGW(MROS_LOGGER_TAG, "Using default pt2_w = %.3f", robot_parameters.pt2_w);
     }
 
+    // PT2 enable
     int32_t pt2_enable;
     if (load_int_from_nvs(&pt2_enable, PT2_W_PARAM_NAME) == ESP_OK) {
         robot_parameters.pt2_enable = (pt2_enable == 1) ? true : false; // Convert back to bool
@@ -141,6 +147,16 @@ esp_err_t robot_parameters_init(void) {
     } else {
         robot_parameters.pt2_enable = (PT2_ENABLE == 1) ? true : false; // Convert back to bool
         ESP_LOGW(MROS_LOGGER_TAG, "Using default pt2_enable = %i", robot_parameters.pt2_enable);
+    }
+
+    // corner suppress
+    int32_t max_corner_suppress;
+    if (load_int_from_nvs(&max_corner_suppress, MAX_CORNER_SUPPRESS_PARAM_NAME) == ESP_OK) {
+        robot_parameters.max_corner_suppress = (float)max_corner_suppress / 1000.0f; // Convert back to float
+        ESP_LOGI(MROS_LOGGER_TAG, "Loaded max_corner_suppress = %.3f from NVS", robot_parameters.max_corner_suppress);
+    } else {
+        robot_parameters.max_corner_suppress = (float)MAX_CORNER_SUPPRESS / 1000.0f; // Convert back to float
+        ESP_LOGW(MROS_LOGGER_TAG, "Using default max_corner_suppress = %.3f", robot_parameters.max_corner_suppress);
     }
 
     xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -151,6 +167,7 @@ esp_err_t robot_parameters_init(void) {
 esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
     rcl_ret_t rc;
 
+    // Wheel base
     rc = rclc_add_parameter(server, ROBOT_WHEEL_RADIUS_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add wheel radius parameter");
@@ -162,6 +179,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // track width
     rc = rclc_add_parameter(server, ROBOT_TRACK_WIDTH_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add track width parameter");
@@ -173,6 +191,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // wheel base
     rc = rclc_add_parameter(server, ROBOT_WHEEL_BASE_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add wheel base parameter");
@@ -184,6 +203,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // max angeular velocity
     rc = rclc_add_parameter(server, MAX_ANG_VEL_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add max angular velocity parameter");
@@ -195,6 +215,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // correction weight
     rc = rclc_add_parameter(server, CORR_WEIGHT_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add correction weight parameter");
@@ -206,6 +227,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // Kp
     rc = rclc_add_parameter(server, KP_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add kp parameter");
@@ -217,6 +239,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // D
     rc = rclc_add_parameter(server, PT2_D_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_D parameter");
@@ -228,6 +251,7 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // w
     rc = rclc_add_parameter(server, PT2_W_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_w parameter");
@@ -239,14 +263,27 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         return ESP_FAIL;
     }
 
+    // PT2 enable
     rc = rclc_add_parameter(server, PT2_ENABLE_PARAM_NAME, RCLC_PARAMETER_BOOL);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_enable parameter");
         return ESP_FAIL;
     }
-    rc = rclc_parameter_set_int(server, PT2_ENABLE_PARAM_NAME, robot_parameters.pt2_enable); // Convert to int
+    rc = rclc_parameter_set_int(server, PT2_ENABLE_PARAM_NAME, robot_parameters.pt2_enable);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for pt2_enable");
+        return ESP_FAIL;
+    }
+
+    // max corner suppress
+    rc = rclc_add_parameter(server, MAX_CORNER_SUPPRESS_PARAM_NAME, RCLC_PARAMETER_BOOL);
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to add max_corner_suppress parameter");
+        return ESP_FAIL;
+    }
+    rc = rclc_parameter_set_int(server, MAX_CORNER_SUPPRESS_PARAM_NAME, (int32_t)(robot_parameters.max_corner_suppress * 1000)); // Convert to int
+    if (rc != RCL_RET_OK) {
+        ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for max_corner_suppress");
         return ESP_FAIL;
     }
 
@@ -261,6 +298,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         return false;
     }
 
+    // wheel raduis
     if (strcmp(new_param->name.data, ROBOT_WHEEL_RADIUS_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.wheel_radius = new_param->value.integer_value; //! This local variable should probably be better handled, seems abit redundant
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -273,6 +311,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // track width
     if (strcmp(new_param->name.data, ROBOT_TRACK_WIDTH_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.track_width = new_param->value.integer_value;
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -285,6 +324,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // wheel base
     if (strcmp(new_param->name.data, ROBOT_WHEEL_BASE_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.wheel_base = new_param->value.integer_value;
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -297,6 +337,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // max angular velocity
     if (strcmp(new_param->name.data, MAX_ANG_VEL_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.max_angular_velocity = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -309,6 +350,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // correction weight
     if (strcmp(new_param->name.data, CORR_WEIGHT_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.correction_weight = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -321,6 +363,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // Kp
     if (strcmp(new_param->name.data, KP_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.kp = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -333,6 +376,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // D
     if (strcmp(new_param->name.data, PT2_D_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.pt2_D = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -345,6 +389,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // w
     if (strcmp(new_param->name.data, PT2_W_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
         robot_parameters.pt2_w = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -357,6 +402,7 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
         }
     }
 
+    // PT2 enable
     if (strcmp(new_param->name.data, PT2_ENABLE_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_BOOL) {
         robot_parameters.pt2_enable = new_param->value.bool_value;
         xQueueOverwrite(robot_params_queue, &robot_parameters);
@@ -365,6 +411,19 @@ bool robot_parameters_handle_ros_change(const rcl_interfaces__msg__Parameter *ne
             return true;
         } else {
             ESP_LOGE(MROS_LOGGER_TAG, "Failed to save pt2_enable to NVS");
+            return false;
+        }
+    }
+
+    // max corner suppress
+    if (strcmp(new_param->name.data, MAX_CORNER_SUPPRESS_PARAM_NAME) == 0 && new_param->value.type == RCLC_PARAMETER_INT) {
+        robot_parameters.max_corner_suppress = (float)new_param->value.integer_value / 1000.0f; // Convert back to float
+        xQueueOverwrite(robot_params_queue, &robot_parameters);
+        if (save_int_to_nvs((int32_t)(robot_parameters.max_corner_suppress * 1000), MAX_CORNER_SUPPRESS_PARAM_NAME) == ESP_OK) {
+            ESP_LOGI(MROS_LOGGER_TAG, "Parameter for max_corner_suppress changed to %.3f", robot_parameters.max_corner_suppress);
+            return true;
+        } else {
+            ESP_LOGE(MROS_LOGGER_TAG, "Failed to save max_corner_suppress to NVS");
             return false;
         }
     }
@@ -399,5 +458,6 @@ esp_err_t robot_parameters_get_preconfigured(robot_parameters_t *params) {
     params->pt2_D = (float)PT2_D / 1000.0f;
     params->pt2_w = (float)PT2_W / 1000.0f;
     params->pt2_enable = (PT2_ENABLE == 1) ? true : false;
+    params->max_corner_suppress = (float)MAX_CORNER_SUPPRESS / 1000.0f;
     return ESP_OK;
 }

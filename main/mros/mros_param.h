@@ -85,6 +85,13 @@
 #endif
 #define PT2_ENABLE_PARAM_NAME "PT2_enable"
 
+#ifdef CONFIG_MAX_CORNER_SUPPRESS
+#define MAX_CORNER_SUPPRESS CONFIG_MAX_CORNER_SUPPRESS
+#else
+#define MAX_CORNER_SUPPRESS 1000
+#endif
+#define MAX_CORNER_SUPPRESS_PARAM_NAME "max_corner_sup"
+
 // Check if names are too long
 _Static_assert(sizeof(ROBOT_WHEEL_RADIUS_PARAM_NAME) <= 15, "ROBOT_WHEEL_RADIUS_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(ROBOT_TRACK_WIDTH_PARAM_NAME) <= 15, "ROBOT_TRACK_WIDTH_PARAM_NAME must not exceed 15 characters");
@@ -95,6 +102,7 @@ _Static_assert(sizeof(KP_PARAM_NAME) <= 15, "KP_PARAM_NAME must not exceed 15 ch
 _Static_assert(sizeof(PT2_D_PARAM_NAME) <= 15, "PT2_D_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(PT2_W_PARAM_NAME) <= 15, "PT2_W_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(PT2_ENABLE_PARAM_NAME) <= 15, "PT2_ENABLE_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(MAX_CORNER_SUPPRESS_PARAM_NAME) <= 15, "MAX_CORNER_SUPPRESS_PARAM_NAME must not exceed 15 characters");
 
 typedef struct {
     int32_t track_width;
@@ -106,6 +114,7 @@ typedef struct {
     float pt2_D;
     float pt2_w;
     bool pt2_enable;
+    float max_corner_suppress;
 } robot_parameters_t;
 
 /**
