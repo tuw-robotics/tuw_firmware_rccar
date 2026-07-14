@@ -154,9 +154,11 @@ static void base_control_task(void *pv) {
                 last_err = 0.0f;
                 ik_input.omega_z = cmd_local.angular_vel;
             }
+            ik_input.omega_z = cmd_local.angular_vel;
+
             ik_input.vel_x = cmd_local.linear_vel;
 
-            // ik_input.omega_z = ik_input.omega_z + 0.5f; // some error for testing
+            // ik_input.omega_z = ik_input.omega_z + 0.1f; // some error for testing
 
             if (inverse_kinematics(&ik_input, &ik_output) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to calculate inverse kinematics");

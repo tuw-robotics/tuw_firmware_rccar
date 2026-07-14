@@ -269,14 +269,14 @@ esp_err_t robot_parameters_register_all(rclc_parameter_server_t *server) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add pt2_enable parameter");
         return ESP_FAIL;
     }
-    rc = rclc_parameter_set_int(server, PT2_ENABLE_PARAM_NAME, robot_parameters.pt2_enable);
+    rc = rclc_parameter_set_bool(server, PT2_ENABLE_PARAM_NAME, robot_parameters.pt2_enable);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to set initial value for pt2_enable");
         return ESP_FAIL;
     }
 
     // max corner suppress
-    rc = rclc_add_parameter(server, MAX_CORNER_SUPPRESS_PARAM_NAME, RCLC_PARAMETER_BOOL);
+    rc = rclc_add_parameter(server, MAX_CORNER_SUPPRESS_PARAM_NAME, RCLC_PARAMETER_INT);
     if (rc != RCL_RET_OK) {
         ESP_LOGE(MROS_LOGGER_TAG, "Failed to add max_corner_suppress parameter");
         return ESP_FAIL;
