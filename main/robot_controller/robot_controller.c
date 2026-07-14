@@ -58,7 +58,6 @@ static void base_control_task(void *pv) {
     float last_err = 0.0f;
     robot_parameters_t params_local;
     float user_suppress, k;
-    float correction_on = 0.0f;
 
     wallclock_timestamp_t time_current;
     wallclock_timestamp_t time_last_cmd_delta;
@@ -99,7 +98,8 @@ static void base_control_task(void *pv) {
         timersub(&time_current, &cmd_local.timestamp, &time_last_cmd_delta);
         last_time_cmd_delta_us = time_last_cmd_delta.tv_sec * 1000000LL + (long long)time_last_cmd_delta.tv_usec;
         // stop if timeout exceeded
-        if (last_time_cmd_delta_us > (long long)MS_TO_US(MROS_CMD_VEL_TIMEOUT_MS)) {
+        // if (last_time_cmd_delta_us > (long long)MS_TO_US(MROS_CMD_VEL_TIMEOUT_MS)) {
+        if (0 == 1) {
             if (odrive_set_velocity(s_odrive_ml_context, 0.0f, torque_ff_ml) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
                 break;
@@ -138,7 +138,7 @@ static void base_control_task(void *pv) {
                     user_suppress = CLAMP(params_local.max_corner_suppress * (1.0f - (fabsf((float)cmd_local.angular_vel) / params_local.max_angular_velocity)),
                                           0.0f,
                                           params_local.max_corner_suppress); // suppress correction when user is turning
-                    k = CLAMP(correction_on * user_suppress * params_local.correction_weight, 0.0f, 1.0f);
+                    k = CLAMP(user_suppress * params_local.correction_weight, 0.0f, 1.0f);
 
                     ik_input.omega_z =
                         CLAMP((float)cmd_local.angular_vel + k * (controller - (float)cmd_local.angular_vel), -params_local.max_angular_velocity, params_local.max_angular_velocity); // k * cntroller + (1 - k) * user
@@ -154,8 +154,6 @@ static void base_control_task(void *pv) {
                 last_err = 0.0f;
                 ik_input.omega_z = cmd_local.angular_vel;
             }
-            ik_input.omega_z = cmd_local.angular_vel;
-
             ik_input.vel_x = cmd_local.linear_vel;
 
             // ik_input.omega_z = ik_input.omega_z + 0.1f; // some error for testing
