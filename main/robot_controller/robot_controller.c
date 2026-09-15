@@ -98,8 +98,7 @@ static void base_control_task(void *pv) {
         timersub(&time_current, &cmd_local.timestamp, &time_last_cmd_delta);
         last_time_cmd_delta_us = time_last_cmd_delta.tv_sec * 1000000LL + (long long)time_last_cmd_delta.tv_usec;
         // stop if timeout exceeded
-        // if (last_time_cmd_delta_us > (long long)MS_TO_US(MROS_CMD_VEL_TIMEOUT_MS)) {
-        if (0 == 1) {
+        if (last_time_cmd_delta_us > (long long)MS_TO_US(MROS_CMD_VEL_TIMEOUT_MS)) {
             if (odrive_set_velocity(s_odrive_ml_context, 0.0f, torque_ff_ml) != ESP_OK) {
                 ESP_LOGE(ROBOT_CONTROLLER_LOGGER_TAG, "Failed to set velocity for ODrive Node ID %d", s_odrive_ml_context->node_id);
                 break;
@@ -124,9 +123,9 @@ static void base_control_task(void *pv) {
                     current_yaw = math_normalize_angle(math_quaternion_to_yaw(imu_local.orientation.x, imu_local.orientation.y, imu_local.orientation.z, imu_local.orientation.w));
                     yaw_err = math_normalize_angle(cmd_local.angle - current_yaw);
 
-                    if (params_local.pt2_enable == true) {
-                        controller_a = 1 / 2 * params_local.pt2_w * params_local.pt2_w * 0.02;
-                        controller_b = 2 * params_local.pt2_D * params_local.pt2_w;
+                    if (params_local.pi_enable == true) {
+                        controller_a = 1 / 2 * params_local.ki * 0.02;
+                        controller_b = params_local.kp;
                         controller = CLAMP(last_controller + (controller_a + controller_b) * yaw_err + (controller_a - controller_b) * last_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);
                     } else {
                         controller = CLAMP(params_local.kp * yaw_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);

@@ -64,26 +64,19 @@
 #endif
 #define KP_PARAM_NAME "kp"
 
-#ifdef CONFIG_PT2_D
-#define PT2_D CONFIG_PT2_D
+#ifdef CONFIG_KI
+#define KI CONFIG_KI
 #else
-#define PT2_D 800
+#define KI 200
 #endif
-#define PT2_D_PARAM_NAME "PT2_D"
+#define KI_PARAM_NAME "ki"
 
-#ifdef CONFIG_PT2_W
-#define PT2_W CONFIG_PT2_W
+#ifndef CONFIG_PI_ENABLE
+#define PI_ENABLE 0
 #else
-#define PT2_W 2000
+#define PI_ENABLE CONFIG_PI_ENABLE
 #endif
-#define PT2_W_PARAM_NAME "PT2_w"
-
-#ifndef CONFIG_PT2_ENABLE
-#define PT2_ENABLE 0
-#else
-#define PT2_ENABLE CONFIG_PT2_ENABLE
-#endif
-#define PT2_ENABLE_PARAM_NAME "PT2_enable"
+#define PI_ENABLE_PARAM_NAME "PI_enable"
 
 #ifdef CONFIG_MAX_CORNER_SUPPRESS
 #define MAX_CORNER_SUPPRESS CONFIG_MAX_CORNER_SUPPRESS
@@ -99,9 +92,8 @@ _Static_assert(sizeof(ROBOT_WHEEL_BASE_PARAM_NAME) <= 15, "ROBOT_WHEEL_BASE_PARA
 _Static_assert(sizeof(MAX_ANG_VEL_PARAM_NAME) <= 15, "MAX_ANG_VEL_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(CORR_WEIGHT_PARAM_NAME) <= 15, "CORR_WEIGHT_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(KP_PARAM_NAME) <= 15, "KP_PARAM_NAME must not exceed 15 characters");
-_Static_assert(sizeof(PT2_D_PARAM_NAME) <= 15, "PT2_D_PARAM_NAME must not exceed 15 characters");
-_Static_assert(sizeof(PT2_W_PARAM_NAME) <= 15, "PT2_W_PARAM_NAME must not exceed 15 characters");
-_Static_assert(sizeof(PT2_ENABLE_PARAM_NAME) <= 15, "PT2_ENABLE_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(KI_PARAM_NAME) <= 15, "KI_PARAM_NAME must not exceed 15 characters");
+_Static_assert(sizeof(PI_ENABLE_PARAM_NAME) <= 15, "PI_ENABLE_PARAM_NAME must not exceed 15 characters");
 _Static_assert(sizeof(MAX_CORNER_SUPPRESS_PARAM_NAME) <= 15, "MAX_CORNER_SUPPRESS_PARAM_NAME must not exceed 15 characters");
 
 typedef struct {
@@ -111,9 +103,8 @@ typedef struct {
     float max_angular_velocity;
     float correction_weight;
     float kp;
-    float pt2_D;
-    float pt2_w;
-    bool pt2_enable;
+    float ki;
+    bool pi_enable;
     float max_corner_suppress;
 } robot_parameters_t;
 

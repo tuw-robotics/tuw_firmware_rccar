@@ -162,25 +162,20 @@ menu "Application-specific settings"
         config KP
             int "Proportional gain (*1000)"
             help
-                Proportional gain for the P controller, multiplied by 1000 to allow for fractional values.
+                Proportional gain for the P / PI controller, multiplied by 1000 to allow for fractional values.
             default 2000
 
-        config PT2_D
+        config KI
             int "D (*1000)"
+            int "Integral gain (*1000)"
             help
-                D value of the PT2 controller, multiplied by 1000 to allow for fractional values.
-            default 800
+                Integral gain for the PI controller, multiplied by 1000 to allow for fractional values.
+            default 200
 
-        config PT2_W
-            int "w (*1000)"
+        config PI_ENABLE
+            bool "Enable PI"
             help
-                w value of the PT2 controller, multiplied by 1000 to allow for fractional values.
-            default 2000
-
-        config PT2_ENABLE
-            bool "Enable PT2"
-            help
-                Use the PT2 controller instead of the P controller.
+                Use the PI controller instead of the P controller.
             default y
 
     endmenu # PID controller settings
