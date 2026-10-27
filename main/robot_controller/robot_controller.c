@@ -124,7 +124,7 @@ static void base_control_task(void *pv) {
                     yaw_err = math_normalize_angle(cmd_local.angle - current_yaw);
 
                     if (params_local.pi_enable == true) {
-                        controller_a = 1 / 2 * params_local.ki * 0.02;
+                        controller_a = 0.5f * params_local.ki * 0.02f;
                         controller_b = params_local.kp;
                         controller = CLAMP(last_controller + (controller_a + controller_b) * yaw_err + (controller_a - controller_b) * last_err, -params_local.max_angular_velocity, params_local.max_angular_velocity);
                     } else {
